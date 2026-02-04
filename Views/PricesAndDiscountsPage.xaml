@@ -1,0 +1,81 @@
+<Page x:Class="SellerOps.App.Views.PricesAndDiscountsPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Title="Цены и скидки (WB)">
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <DockPanel Grid.Row="0" LastChildFill="True" Margin="0,0,0,10">
+            <Button Content="← Назад" Click="Back_Click" Width="100" Margin="0,0,10,0"/>
+            <TextBlock Text="Цены и скидки (PricesAndDiscounts)" FontSize="20" FontWeight="Bold" VerticalAlignment="Center"/>
+        </DockPanel>
+
+        <!-- Controls -->
+        <Grid Grid.Row="1" Margin="0,0,0,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <Button x:Name="RefreshButton" Grid.Column="0" Content="Обновить из WB" Click="Refresh_Click" Padding="14,6" Margin="0,0,10,0"/>
+            <Button x:Name="QuarantineButton" Grid.Column="1" Content="Загрузить карантин" Click="Quarantine_Click" Padding="14,6" Margin="0,0,10,0"/>
+            <TextBox Grid.Column="2" x:Name="SearchBox" Margin="0,0,10,0"
+                     Height="30" VerticalContentAlignment="Center"
+                     TextChanged="SearchBox_TextChanged"/>
+            <TextBlock Grid.Column="3" x:Name="StatusBlock" VerticalAlignment="Center" Foreground="Gray"/>
+        </Grid>
+
+        <!-- Content -->
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="3*"/>
+                <ColumnDefinition Width="2*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Goods -->
+            <GroupBox Header="Товары (listGoods)" Grid.Column="0" Margin="0,0,10,0">
+                <DataGrid x:Name="GoodsGrid"
+                          AutoGenerateColumns="False"
+                          CanUserAddRows="False"
+                          CanUserDeleteRows="False"
+                          IsReadOnly="True"
+                          SelectionMode="Single"
+                          SelectionChanged="GoodsGrid_SelectionChanged">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="nmID" Binding="{Binding NmId}" Width="110"/>
+                        <DataGridTextColumn Header="vendorCode" Binding="{Binding VendorCode}" Width="*"/>
+                        <DataGridTextColumn Header="discount, %" Binding="{Binding Discount}" Width="110"/>
+                        <DataGridTextColumn Header="club, %" Binding="{Binding ClubDiscount}" Width="90"/>
+                        <DataGridTextColumn Header="editableSize" Binding="{Binding EditableSizePrice}" Width="120"/>
+                        <DataGridTextColumn Header="badTurnover" Binding="{Binding IsBadTurnover}" Width="120"/>
+                        <DataGridTextColumn Header="imported" Binding="{Binding ImportedAtUtc}" Width="170"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </GroupBox>
+
+            <!-- Sizes -->
+            <GroupBox Header="Размеры (sizes)" Grid.Column="1">
+                <DataGrid x:Name="SizesGrid"
+                          AutoGenerateColumns="False"
+                          CanUserAddRows="False"
+                          CanUserDeleteRows="False"
+                          IsReadOnly="True">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="sizeID" Binding="{Binding SizeId}" Width="90"/>
+                        <DataGridTextColumn Header="techSize" Binding="{Binding TechSizeName}" Width="*"/>
+                        <DataGridTextColumn Header="price" Binding="{Binding Price}" Width="100"/>
+                        <DataGridTextColumn Header="discounted" Binding="{Binding DiscountedPrice}" Width="110"/>
+                        <DataGridTextColumn Header="clubDiscounted" Binding="{Binding ClubDiscountedPrice}" Width="130"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </GroupBox>
+        </Grid>
+    </Grid>
+</Page>

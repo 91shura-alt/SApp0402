@@ -1,0 +1,128 @@
+﻿<Page x:Class="SellerOps.App.Views.AnalyticsPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+      mc:Ignorable="d"
+      Title="AnalyticsPage">
+
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Верхняя панель: даты + кнопки -->
+        <Grid Grid.Row="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="20"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="20"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Grid.Column="0">
+                <TextBlock Text="С:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <DatePicker x:Name="FromDate" Width="130"/>
+                <TextBlock Text="По:" VerticalAlignment="Center" Margin="12,0,6,0"/>
+                <DatePicker x:Name="ToDate" Width="130"/>
+            </StackPanel>
+
+            <StackPanel Grid.Column="4" Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button x:Name="LoadRealBtn"
+                        Content="Загрузить реализации"
+                        Margin="0,0,8,0"
+                        Padding="10,6"
+                        Click="LoadReal_Click"/>
+
+                <Button x:Name="LoadStocksBtn"
+                        Content="Снимок остатков"
+                        Margin="0,0,8,0"
+                        Padding="10,6"
+                        Click="LoadStocks_Click"/>
+
+                <Button x:Name="BuildSummaryBtn"
+                        Content="Сводка"
+                        Padding="10,6"
+                        Click="BuildSummary_Click"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- Полоса состояния -->
+        <Grid Grid.Row="1" Margin="0,10,0,10">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Индикатор занятости -->
+            <ProgressBar x:Name="BusyBar"
+                         Grid.Row="0"
+                         Grid.ColumnSpan="2"
+                         Height="4"
+                         Margin="0,0,0,8"
+                         IsIndeterminate="True"
+                         Visibility="Collapsed"/>
+
+            <TextBlock x:Name="BusyText"
+                       Grid.Row="1"
+                       Grid.Column="0"
+                       VerticalAlignment="Center"
+                       Text="Готово"
+                       Opacity="0.9"/>
+
+            <Button x:Name="CancelBtn"
+                    Grid.Row="1"
+                    Grid.Column="1"
+                    Content="Отмена"
+                    Margin="12,0,0,0"
+                    Padding="10,6"
+                    Visibility="Collapsed"
+                    Click="CancelBtn_Click" />
+        </Grid>
+
+        <!-- Вкладки -->
+        <TabControl x:Name="Tabs" Grid.Row="2">
+
+            <TabItem x:Name="SummaryTab" Header="Сводка">
+                <DataGrid x:Name="SummaryGrid"
+                          AutoGenerateColumns="True"
+                          IsReadOnly="True"
+                          CanUserAddRows="False"
+                          CanUserDeleteRows="False"/>
+            </TabItem>
+
+            <TabItem x:Name="RealsTab" Header="Реализации (сырые)">
+                <DataGrid x:Name="RealGrid"
+                          AutoGenerateColumns="True"
+                          IsReadOnly="True"
+                          CanUserAddRows="False"
+                          CanUserDeleteRows="False"/>
+            </TabItem>
+
+            <TabItem x:Name="StocksTab" Header="Остатки (снимки)">
+                <DataGrid x:Name="StockGrid"
+                          AutoGenerateColumns="True"
+                          IsReadOnly="True"
+                          CanUserAddRows="False"
+                          CanUserDeleteRows="False"/>
+            </TabItem>
+
+            <TabItem x:Name="BalanceTab" Header="Баланс">
+                <DataGrid x:Name="BalanceGrid"
+                          AutoGenerateColumns="True"
+                          IsReadOnly="True"
+                          CanUserAddRows="False"
+                          CanUserDeleteRows="False"/>
+            </TabItem>
+
+        </TabControl>
+    </Grid>
+</Page>

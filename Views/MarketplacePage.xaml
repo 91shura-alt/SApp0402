@@ -1,0 +1,53 @@
+﻿<Page x:Class="SellerOps.App.Views.MarketplacePage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+      mc:Ignorable="d"
+      Title="Маркетплейс (FBS)">
+
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Top">
+            <TextBlock Text="Период:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+            <DatePicker x:Name="FromDate" Width="125" Margin="0,0,6,0"/>
+            <TextBlock Text="—" VerticalAlignment="Center" Margin="0,0,6,0"/>
+            <DatePicker x:Name="ToDate" Width="125" Margin="0,0,12,0"/>
+
+            <Button x:Name="LoadNewFbsBtn" Content="Новые FBS" Click="LoadNewFbs_Click" Margin="0,0,12,0" Padding="10,4"/>
+            <Button x:Name="LoadPeriodFbsBtn" Content="Период FBS" Click="LoadPeriodFbs_Click" Margin="0,0,12,0" Padding="10,4"/>
+
+            <Button Content="Обновить" Click="Refresh_Click" Padding="10,4"/>
+        </StackPanel>
+
+        <DockPanel Grid.Row="1" Margin="0,10,0,10">
+            <ProgressBar x:Name="BusyBar" DockPanel.Dock="Left" Width="180" Height="16" IsIndeterminate="True" Visibility="Collapsed"/>
+            <Button x:Name="CancelBtn" DockPanel.Dock="Left" Content="Отмена" Click="CancelBtn_Click" Margin="10,0,0,0" Visibility="Collapsed" Padding="10,2"/>
+            <TextBlock x:Name="BusyText" VerticalAlignment="Center" Margin="12,0,0,0"/>
+        </DockPanel>
+
+        <TabControl x:Name="Tabs" Grid.Row="2">
+            <TabItem Header="Заказы FBS (локально)">
+                <DataGrid x:Name="OrdersGrid"
+                          AutoGenerateColumns="True"
+                          IsReadOnly="True"
+                          EnableRowVirtualization="True"
+                          EnableColumnVirtualization="True"/>
+            </TabItem>
+
+            <TabItem Header="Сырые ответы (FBS)">
+                <DataGrid x:Name="RawGrid"
+                          AutoGenerateColumns="True"
+                          IsReadOnly="True"
+                          
+                          EnableRowVirtualization="True"
+                          EnableColumnVirtualization="True"/>
+            </TabItem>
+        </TabControl>
+    </Grid>
+</Page>

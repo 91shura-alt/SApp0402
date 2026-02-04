@@ -1,0 +1,191 @@
+﻿<Page x:Class="SellerOps.App.Views.ScannerPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Title="Сканер">
+
+    <Grid Margin="8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <!-- Панель управления -->
+            <RowDefinition Height="Auto"/>
+            <!-- Инфо-панель -->
+            <RowDefinition Height="*"/>
+            <!-- Контентные зоны -->
+        </Grid.RowDefinitions>
+
+        <!-- ===== Верхняя панель: назад, режимы, ввод ШК ===== -->
+        <DockPanel Grid.Row="0" LastChildFill="False" Margin="0,0,0,8">
+            <Button x:Name="BtnBack"
+                    DockPanel.Dock="Left"
+                    Content="← Назад"
+                    Padding="12,6"
+                    Margin="0,0,8,0"
+                    Click="Back_Click"/>
+
+            <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,16,0">
+                <RadioButton x:Name="RadioAdd"    Content="Добавлять"  Margin="0,0,12,0" IsChecked="True" Checked="RadioAdd_Checked"/>
+                <RadioButton x:Name="RadioRemove" Content="Удалять"     Margin="0,0,12,0" Checked="RadioRemove_Checked"/>
+                <RadioButton x:Name="RadioShip"   Content="Отгружать"   Checked="RadioShip_Checked"/>
+            </StackPanel>
+
+            <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBox x:Name="TxtBarcode"
+                         Width="320"
+                         Margin="0,0,8,0"
+                         VerticalContentAlignment="Center"
+                         TextChanged="TxtBarcode_TextChanged"
+                         PreviewKeyDown="TxtBarcode_PreviewKeyDown">
+                    <TextBox.ToolTip>Сканируйте штрихкод (Enter обрабатывается мгновенно)</TextBox.ToolTip>
+                </TextBox>
+                <TextBlock Text="Последний скан: " VerticalAlignment="Center" Opacity=".7"/>
+                <TextBlock x:Name="LblLastScan"    VerticalAlignment="Center" FontWeight="Bold" Margin="4,0,16,0"/>
+                <TextBlock x:Name="LblBox"         VerticalAlignment="Center" FontWeight="Bold"/>
+            </StackPanel>
+
+            <!-- Кнопки справа -->
+            <StackPanel DockPanel.Dock="Right"
+            Orientation="Horizontal"
+            VerticalAlignment="Center">
+                <Button Content="Логи"
+            Margin="0,0,8,0"
+            Padding="12,6"
+            Click="BtnLogs_Click" />
+                <Button Content="Короба"
+            Margin="0,0,8,0"
+            Padding="12,6"
+            Click="BtnBoxes_Click" />
+                <Button Content="Итоги"
+            Margin="0,0,0,0"
+            Padding="12,6"
+            Click="BtnTotals_Click" />
+            </StackPanel>
+
+        </DockPanel>
+
+        <!-- ===== Информация о товаре / подсказки ===== -->
+        <Border Grid.Row="1" Background="#FFF5F5F5" BorderBrush="#DDD" BorderThickness="1" Padding="8" Margin="0,0,0,8">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="3*"/>
+                    <ColumnDefinition Width="2*"/>
+                    <ColumnDefinition Width="2*"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Orientation="Vertical">
+                    <TextBlock>
+                        <Run Text="Поставка: "/><Run x:Name="LblSupply" FontWeight="Bold"/>
+                    </TextBlock>
+                    <TextBlock>
+                        <Run Text="Артикул: "/><Run x:Name="LblArticle" FontWeight="Bold"/>
+                    </TextBlock>
+                    <TextBlock TextWrapping="Wrap">
+                        <Run Text="Наименование: "/><Run x:Name="LblItem" FontWeight="Bold"/>
+                    </TextBlock>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Vertical" Margin="16,0,0,0">
+                    <TextBlock Text="Склады (эта поставка):" FontWeight="SemiBold"/>
+                    <TextBlock x:Name="LblWarehouses" TextWrapping="Wrap"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="2" Orientation="Vertical" Margin="16,0,0,0">
+                    <TextBlock Text="Другие поставки с остатком:" FontWeight="SemiBold"/>
+                    <TextBlock x:Name="LblOtherSupplies" TextWrapping="Wrap"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ===== Контентные зоны: Логи | Короба | Итоги ===== -->
+        <Grid Grid.Row="2">
+            <!-- === Логи === -->
+            <Grid x:Name="LogsArea" Visibility="Visible">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <Button Content="Очистить лог"
+                        Grid.Row="0"
+                        Width="140"
+                        Padding="8,6"
+                        Margin="0,0,0,8"
+                        Click="ClearLog_Click"/>
+
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                    <TextBox x:Name="TxtLog"
+                             FontFamily="Consolas"
+                             FontSize="12"
+                             IsReadOnly="True"
+                             AcceptsReturn="True"
+                             VerticalScrollBarVisibility="Auto"
+                             BorderThickness="1"/>
+                </ScrollViewer>
+
+                <!-- отдельная строка, чтобы не падал Grid -->
+                <TextBlock x:Name="LblResult" Grid.Row="2" Visibility="Collapsed"/>
+            </Grid>
+            <!-- === /Логи === -->
+
+            <!-- === Короба === -->
+            <Grid x:Name="BoxesArea" Visibility="Collapsed">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="250"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Список коробов слева -->
+                <ListBox x:Name="BoxesList"
+                         Grid.Column="0"
+                         Margin="0,0,8,0"
+                         DisplayMemberPath="Title"
+                         SelectionChanged="BoxesList_SelectionChanged"/>
+
+                <!-- Содержимое выбранного короба справа -->
+                <DataGrid x:Name="BoxContentsGrid"
+                          Grid.Column="1"
+                          AutoGenerateColumns="False"
+                          CanUserAddRows="False"
+                          CanUserDeleteRows="False"
+                          IsReadOnly="True"
+                          HeadersVisibility="Column"
+                          GridLinesVisibility="All"
+                          RowHeaderWidth="0">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Наименование" Binding="{Binding Name}"    Width="*"   />
+                        <DataGridTextColumn Header="Артикул"      Binding="{Binding Article}" Width="160" />
+                        <DataGridTextColumn Header="ШК"           Binding="{Binding Barcode}" Width="220" />
+                        <DataGridTextColumn Header="Кол-во"       Binding="{Binding Qty}"     Width="90"  />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Grid>
+            <!-- === /Короба === -->
+
+            <!-- === Итоги === -->
+            <Grid x:Name="TotalsArea" Visibility="Collapsed">
+                <DataGrid x:Name="TotalsGrid"
+                          AutoGenerateColumns="False"
+                          CanUserAddRows="False"
+                          CanUserDeleteRows="False"
+                          IsReadOnly="True"
+                          HeadersVisibility="Column"
+                          GridLinesVisibility="All"
+                          RowHeaderWidth="0">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="№ короба"     Binding="{Binding BoxCode}" Width="150"/>
+                        <DataGridTextColumn Header="Наименование" Binding="{Binding Name}"    Width="*"/>
+                        <DataGridTextColumn Header="Артикул"       Binding="{Binding Article}" Width="160"/>
+                        <DataGridTextColumn Header="Штрихкод"      Binding="{Binding Barcode}" Width="220"/>
+                        <DataGridTextColumn Header="Собрано"       Binding="{Binding Picked}"  Width="90"/>
+                        <DataGridTextColumn Header="Нужно всего"   Binding="{Binding Need}"    Width="110"/>
+                        <DataGridTextColumn Header="Осталось"      Binding="{Binding Remain}"  Width="90"/>
+                        <DataGridTextColumn Header="Статус короба" Binding="{Binding Status}"  Width="120"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Grid>
+            <!-- === /Итоги === -->
+        </Grid>
+        <!-- /контентные зоны -->
+    </Grid>
+    <!-- /root grid -->
+</Page>

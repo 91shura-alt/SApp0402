@@ -1,0 +1,27 @@
+﻿<Page x:Class="SellerOps.App.Views.SuppliesPlanPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Title="Итоги">
+
+    <Grid Margin="12">
+        <DataGrid x:Name="TotalsGrid"
+                  AutoGenerateColumns="False"
+                  CanUserAddRows="False"
+                  CanUserDeleteRows="False"
+                  IsReadOnly="True"
+                  HeadersVisibility="Column"
+                  GridLinesVisibility="All"
+                  RowHeaderWidth="0">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="№ короба"      Binding="{Binding BoxCode}" Width="150"/>
+                <DataGridTextColumn Header="Наименование"  Binding="{Binding Name}"    Width="*"/>
+                <DataGridTextColumn Header="Артикул"        Binding="{Binding Article}" Width="160"/>
+                <DataGridTextColumn Header="Штрихкод"       Binding="{Binding Barcode}" Width="220"/>
+                <DataGridTextColumn Header="Собрано"        Binding="{Binding Picked}"  Width="90"/>
+                <DataGridTextColumn Header="Нужно всего"    Binding="{Binding Need}"    Width="110"/>
+                <DataGridTextColumn Header="Осталось"       Binding="{Binding Remain}"  Width="90"/>
+                <DataGridTextColumn Header="Статус короба"  Binding="{Binding Status}"  Width="120"/>
+            </DataGrid.Columns>
+        </DataGrid>
+    </Grid>
+</Page>

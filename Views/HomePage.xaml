@@ -1,0 +1,35 @@
+﻿<Page x:Class="SellerOps.App.Views.HomePage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Title="Главная">
+    <Grid Background="{DynamicResource SurfaceBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Панель управления: селектор темы -->
+        <StackPanel Orientation="Horizontal" Margin="12,8,12,0">
+            <TextBlock Text="Тема:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+            <ComboBox Width="240" SelectionChanged="ThemeSelector_SelectionChanged">
+                <ComboBoxItem Content="Cupertino (по умолчанию)" Tag="Themes/CupertinoQuartz.xaml" IsSelected="True"/>
+                <ComboBoxItem Content="Air Minimal"               Tag="Themes/AirMinimal.xaml"/>
+                <ComboBoxItem Content="Ivory Card"                Tag="Themes/IvoryCard.xaml"/>
+            </ComboBox>
+        </StackPanel>
+
+        <!-- Кнопки навигации -->
+        <StackPanel Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center" Width="260" Margin="0,16,0,0">
+            <TextBlock Text="SellerOps.App" FontSize="22" FontWeight="SemiBold" Margin="0,0,0,16"
+                       HorizontalAlignment="Center"/>
+
+            <Button Content="Наборка FBO"        Height="36" Click="Supplies_Click"      Margin="0,0,0,8"/>
+            <Button Content="Товары"          Height="36" Click="Products_Click"      Margin="0,0,0,8"/>
+            <Button Content="Аналитика"       Height="36" Click="Analytics_Click"     Margin="0,0,0,8"/>
+            <Button Content="Маркетплейс (FBS)" Height="36" Click="Marketplace_Click" Margin="0,0,0,8"/>
+            <Button Content="Цены и скидки"   Height="36" Click="PricesAndDiscounts_Click" Margin="0,0,0,8"/>
+            <Button Content="WB Common"       Height="36" Click="Common_Click"       Margin="0,0,0,8"/>
+            <Button Content="WB настройки"    Height="36" Click="WbSettings_Click"/>
+        </StackPanel>
+    </Grid>
+</Page>
