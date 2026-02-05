@@ -2,6 +2,8 @@
 using SellerOps.App.Domain;
 using SellerOps.App.Services;
 using System;
+using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -9,6 +11,7 @@ using System.Text;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+using Microsoft.Win32;
 
 namespace SellerOps.App.Views
 {
@@ -17,7 +20,116 @@ namespace SellerOps.App.Views
         public WbSettingsPage()
         {
             InitializeComponent();
+            LoadDbSettings();
             LoadTokens();
+        }
+
+        private void LoadDbSettings()
+        {
+            var configured = AppSettings.Instance.DatabasePath;
+            DbPathBox.Text = string.IsNullOrWhiteSpace(configured)
+                ? AppSettings.DefaultDatabasePath
+                : Path.GetFullPath(configured);
+            UpdateDbPathWarning(DbPathBox.Text);
+        }
+
+        private void SaveDbPath_Click(object sender, RoutedEventArgs e)
+        {
+            var raw = (DbPathBox.Text ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                AppSettings.Instance.DatabasePath = null;
+                AppSettings.Instance.Save();
+                LoadDbSettings();
+                MessageBox.Show("Путь к базе сброшен на значение по умолчанию. Перезапустите приложение.",
+                    "База данных", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            var fullPath = Path.GetFullPath(raw);
+            AppSettings.Instance.DatabasePath = fullPath;
+            AppSettings.Instance.Save();
+            DbPathBox.Text = fullPath;
+            UpdateDbPathWarning(fullPath);
+
+            MessageBox.Show("Путь к базе сохранён. Перезапустите приложение для применения.",
+                "База данных", MessageBoxButton.OK, MessageBoxImage.Information);
+
+            if (IsCloudPath(fullPath))
+            {
+                MessageBox.Show("Внимание: путь внутри облачного диска. Не запускайте приложение одновременно на двух ПК.",
+                    "База данных", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        private void DbPathBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            UpdateDbPathWarning(DbPathBox.Text);
+        }
+
+        private void SelectDbPath_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new SaveFileDialog
+            {
+                Filter = "SQLite DB (*.db)|*.db|All files (*.*)|*.*",
+                FileName = "sellerops.db",
+                DefaultExt = ".db"
+            };
+
+            var currentPath = (DbPathBox.Text ?? string.Empty).Trim();
+            if (!string.IsNullOrWhiteSpace(currentPath))
+            {
+                var directory = Path.GetDirectoryName(currentPath);
+                if (!string.IsNullOrWhiteSpace(directory) && Directory.Exists(directory))
+                    dialog.InitialDirectory = directory;
+            }
+
+            if (dialog.ShowDialog() == true)
+            {
+                DbPathBox.Text = dialog.FileName;
+                UpdateDbPathWarning(dialog.FileName);
+            }
+        }
+
+        private void OpenDbFolder_Click(object sender, RoutedEventArgs e)
+        {
+            var raw = (DbPathBox.Text ?? string.Empty).Trim();
+            var path = string.IsNullOrWhiteSpace(raw) ? AppSettings.DefaultDatabasePath : raw;
+            var fullPath = Path.GetFullPath(path);
+            var directory = Path.GetDirectoryName(fullPath);
+            if (string.IsNullOrWhiteSpace(directory))
+            {
+                MessageBox.Show("Не удалось определить папку базы.", "База данных",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (!Directory.Exists(directory))
+                Directory.CreateDirectory(directory);
+
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = directory,
+                UseShellExecute = true
+            });
+        }
+
+        private void UpdateDbPathWarning(string? path)
+        {
+            DbPathWarningText.Visibility = IsCloudPath(path) ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private static bool IsCloudPath(string? path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return false;
+
+            var normalized = path.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+            return normalized.Contains("Yandex.Disk", StringComparison.OrdinalIgnoreCase)
+                || normalized.Contains("YandexDisk", StringComparison.OrdinalIgnoreCase)
+                || normalized.Contains("OneDrive", StringComparison.OrdinalIgnoreCase)
+                || normalized.Contains("Google Drive", StringComparison.OrdinalIgnoreCase)
+                || normalized.Contains("GoogleDrive", StringComparison.OrdinalIgnoreCase);
         }
 
         private void LoadTokens()

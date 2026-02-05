@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using SellerOps.App.Domain;
+using SellerOps.App.Services;
 using System;
 using System.IO;
 
@@ -25,22 +26,32 @@ namespace SellerOps.App.Data
                 if (!string.IsNullOrWhiteSpace(_dbPath))
                     return _dbPath;
 
-                var dir = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "SellerOps");
+                var configuredPath = AppSettings.Instance.DatabasePath;
+                if (!string.IsNullOrWhiteSpace(configuredPath))
+                {
+                    var fullPath = Path.GetFullPath(configuredPath);
+                    var dir = Path.GetDirectoryName(fullPath);
+                    if (!string.IsNullOrWhiteSpace(dir))
+                        Directory.CreateDirectory(dir);
 
-                Directory.CreateDirectory(dir);
+                    _dbPath = fullPath;
+                    return _dbPath;
+                }
 
-                var newPath = Path.Combine(dir, "sellerops.db");
+                var defaultPath = AppSettings.DefaultDatabasePath;
+                var defaultDir = Path.GetDirectoryName(defaultPath);
+                if (!string.IsNullOrWhiteSpace(defaultDir))
+                    Directory.CreateDirectory(defaultDir);
+
                 var oldPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "sellerops.db");
 
                 // Мягкая миграция старого расположения БД -> новое (без потери токенов)
-                if (!File.Exists(newPath) && File.Exists(oldPath))
+                if (!File.Exists(defaultPath) && File.Exists(oldPath))
                 {
-                    File.Copy(oldPath, newPath);
+                    File.Copy(oldPath, defaultPath);
                 }
 
-                _dbPath = newPath;
+                _dbPath = defaultPath;
                 return _dbPath;
             }
         }
