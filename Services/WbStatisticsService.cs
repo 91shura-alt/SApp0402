@@ -285,17 +285,32 @@ namespace SellerOps.App.Services
             {
                 ct.ThrowIfCancellationRequested();
 
-                var url = $"{baseUrl}{report.endpoint}?dateFrom={from:yyyy-MM-dd}";
-                var body = await GetWithRetryRawAsync(
-                    http,
-                    url,
-                    report.kind,
-                    $"{report.kind}_{from:yyyyMMdd}_{to:yyyyMMdd}",
-                    ct);
+                try
+                {
+                    var url = $"{baseUrl}{report.endpoint}?dateFrom={from:yyyy-MM-dd}&dateTo={to:yyyy-MM-dd}";
+                    var body = await GetWithRetryRawAsync(
+                        http,
+                        url,
+                        report.kind,
+                        $"{report.kind}_{from:yyyyMMdd}_{to:yyyyMMdd}",
+                        ct);
 
-                UpsertImportLog(report.kind, to.Date, ParseArrayLen(body), 0, true);
-                await _db.SaveChangesAsync(ct);
-                saved += ParseArrayLen(body);
+                    var added = ParseArrayLen(body);
+                    UpsertImportLog(report.kind, to.Date, added, 0, true);
+                    await _db.SaveChangesAsync(ct);
+                    saved += added;
+                }
+                catch (Exception ex)
+                {
+                    UpsertImportLog(report.kind, to.Date, 0, 0, false);
+                    await _db.SaveChangesAsync(ct);
+
+                    await SaveRawAsync(
+                        report.kind,
+                        $"{report.kind}_{from:yyyyMMdd}_{to:yyyyMMdd}_error_{DateTime.UtcNow:HHmmss}.txt",
+                        ex.Message,
+                        ct);
+                }
 
                 await Task.Delay(MinRequestInterval, ct);
             }

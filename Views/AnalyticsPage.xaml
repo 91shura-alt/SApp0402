@@ -124,13 +124,52 @@
                           CanUserDeleteRows="False"/>
             </TabItem>
 
-            <TabItem x:Name="ReportsTab" Header="Прочие отчёты (журнал)">
-                <DataGrid x:Name="ReportsGrid"
-                          AutoGenerateColumns="True"
-                          AutoGeneratingColumn="ReportsGrid_AutoGeneratingColumn"
-                          IsReadOnly="True"
-                          CanUserAddRows="False"
-                          CanUserDeleteRows="False"/>
+            <TabItem x:Name="ReportsTab" Header="Прочие отчёты">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="1.2*"/>
+                        <RowDefinition Height="8"/>
+                        <RowDefinition Height="2*"/>
+                    </Grid.RowDefinitions>
+
+                    <DataGrid x:Name="ReportsGrid"
+                              Grid.Row="0"
+                              AutoGenerateColumns="True"
+                              AutoGeneratingColumn="ReportsGrid_AutoGeneratingColumn"
+                              SelectionChanged="ReportsGrid_SelectionChanged"
+                              IsReadOnly="True"
+                              CanUserAddRows="False"
+                              CanUserDeleteRows="False"/>
+
+                    <TabControl Grid.Row="2" x:Name="ReportsDetailsTabs">
+                        <TabItem Header="Заказы">
+                            <DataGrid x:Name="OrdersReportGrid"
+                                      AutoGenerateColumns="True"
+                                      AutoGeneratingColumn="ReportDetailsGrid_AutoGeneratingColumn"
+                                      IsReadOnly="True"
+                                      CanUserAddRows="False"
+                                      CanUserDeleteRows="False"/>
+                        </TabItem>
+
+                        <TabItem Header="Продажи">
+                            <DataGrid x:Name="SalesReportGrid"
+                                      AutoGenerateColumns="True"
+                                      AutoGeneratingColumn="ReportDetailsGrid_AutoGeneratingColumn"
+                                      IsReadOnly="True"
+                                      CanUserAddRows="False"
+                                      CanUserDeleteRows="False"/>
+                        </TabItem>
+
+                        <TabItem Header="Поступления">
+                            <DataGrid x:Name="IncomesReportGrid"
+                                      AutoGenerateColumns="True"
+                                      AutoGeneratingColumn="ReportDetailsGrid_AutoGeneratingColumn"
+                                      IsReadOnly="True"
+                                      CanUserAddRows="False"
+                                      CanUserDeleteRows="False"/>
+                        </TabItem>
+                    </TabControl>
+                </Grid>
             </TabItem>
 
             <TabItem x:Name="BalanceTab" Header="Баланс">
