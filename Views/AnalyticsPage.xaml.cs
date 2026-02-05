@@ -2,7 +2,9 @@
 using SellerOps.App.Data;
 using SellerOps.App.Services;
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -189,6 +191,96 @@ namespace SellerOps.App.Views
                 .Where(x => x.Kind.StartsWith("statistics_") && x.Day >= from && x.Day <= to)
                 .OrderByDescending(x => x.ImportedAtUtc)
                 .ToList();
+
+            ClearReportDetails();
+        }
+
+        private void ReportsGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (ReportsGrid.SelectedItem is not Domain.WbImportLog log)
+            {
+                ClearReportDetails();
+                return;
+            }
+
+            var raw = _db.WbRawFiles.AsNoTracking()
+                .Where(x => x.Kind == log.Kind)
+                .OrderByDescending(x => x.CreatedAtUtc)
+                .ThenByDescending(x => x.Id)
+                .FirstOrDefault();
+
+            if (raw == null || string.IsNullOrWhiteSpace(raw.Json))
+            {
+                ClearReportDetails();
+                return;
+            }
+
+            var rows = ParseJsonArray(raw.Json);
+            switch (log.Kind)
+            {
+                case "statistics_orders":
+                    OrdersReportGrid.ItemsSource = rows;
+                    SalesReportGrid.ItemsSource = null;
+                    IncomesReportGrid.ItemsSource = null;
+                    ReportsDetailsTabs.SelectedIndex = 0;
+                    break;
+                case "statistics_sales":
+                    OrdersReportGrid.ItemsSource = null;
+                    SalesReportGrid.ItemsSource = rows;
+                    IncomesReportGrid.ItemsSource = null;
+                    ReportsDetailsTabs.SelectedIndex = 1;
+                    break;
+                case "statistics_incomes":
+                    OrdersReportGrid.ItemsSource = null;
+                    SalesReportGrid.ItemsSource = null;
+                    IncomesReportGrid.ItemsSource = rows;
+                    ReportsDetailsTabs.SelectedIndex = 2;
+                    break;
+                default:
+                    ClearReportDetails();
+                    break;
+            }
+        }
+
+        private void ClearReportDetails()
+        {
+            OrdersReportGrid.ItemsSource = null;
+            SalesReportGrid.ItemsSource = null;
+            IncomesReportGrid.ItemsSource = null;
+        }
+
+        private static List<Dictionary<string, string>> ParseJsonArray(string json)
+        {
+            var rows = new List<Dictionary<string, string>>();
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array)
+                return rows;
+
+            foreach (var el in doc.RootElement.EnumerateArray())
+            {
+                if (el.ValueKind != JsonValueKind.Object) continue;
+
+                var row = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var prop in el.EnumerateObject())
+                    row[PrettyHeader(prop.Name)] = JsonToString(prop.Value);
+
+                rows.Add(row);
+            }
+
+            return rows;
+        }
+
+        private static string JsonToString(JsonElement value)
+        {
+            return value.ValueKind switch
+            {
+                JsonValueKind.String => value.GetString() ?? "",
+                JsonValueKind.Number => value.ToString(),
+                JsonValueKind.True => "Да",
+                JsonValueKind.False => "Нет",
+                JsonValueKind.Null => "",
+                _ => value.GetRawText()
+            };
         }
 
         // ---------------- Column formatting ----------------
@@ -203,6 +295,9 @@ namespace SellerOps.App.Views
             => FormatAutoColumn(e);
 
         private void ReportsGrid_AutoGeneratingColumn(object sender, DataGridAutoGeneratingColumnEventArgs e)
+            => FormatAutoColumn(e);
+
+        private void ReportDetailsGrid_AutoGeneratingColumn(object sender, DataGridAutoGeneratingColumnEventArgs e)
             => FormatAutoColumn(e);
 
         private static void FormatAutoColumn(DataGridAutoGeneratingColumnEventArgs e)
@@ -258,6 +353,34 @@ namespace SellerOps.App.Views
                 "IsComplete" => "Завершено",
                 "AddedRows" => "Строк",
                 "MaxRrdId" => "Макс. RRD ID",
+                "date" => "Дата",
+                "lastChangeDate" => "Дата изменения",
+                "supplierArticle" => "Артикул продавца",
+                "techSize" => "Размер",
+                "barcode" => "Баркод",
+                "totalPrice" => "Сумма",
+                "discountPercent" => "Скидка, %",
+                "isSupply" => "Поставка",
+                "isRealization" => "Реализация",
+                "warehouseName" => "Склад",
+                "oblastOkrugName" => "ФО",
+                "regionName" => "Регион",
+                "incomeID" => "ID поставки",
+                "odid" => "ODID",
+                "spp" => "СПП, %",
+                "forPay" => "К перечислению",
+                "finishedPrice" => "Итоговая цена",
+                "priceWithDisc" => "Цена со скидкой",
+                "nmId" => "NM ID",
+                "subject" => "Предмет",
+                "category" => "Категория",
+                "brand" => "Бренд",
+                "isCancel" => "Отмена",
+                "cancelDate" => "Дата отмены",
+                "gNumber" => "Номер поставки",
+                "incomeId" => "ID поставки",
+                "number" => "Номер",
+                "quantity" => "Количество",
                 _ => name
             };
         }
