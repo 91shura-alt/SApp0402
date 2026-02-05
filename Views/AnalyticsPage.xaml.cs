@@ -77,6 +77,9 @@ namespace SellerOps.App.Views
                 var saved = await _stat.ImportAdditionalStatisticsReportsByPeriodAsync(from, to, ct);
                 BusyText.Text = $"Готово. Строк в прочих отчётах: {saved}";
             });
+
+            Tabs.SelectedItem = ReportsTab;
+            RefreshReports();
         }
 
         private void BuildSummary_Click(object sender, RoutedEventArgs e)
@@ -136,6 +139,7 @@ namespace SellerOps.App.Views
             RefreshSummary();
             RefreshReals();
             RefreshStocks();
+            RefreshReports();
         }
 
         private void RefreshSummary()
@@ -176,12 +180,29 @@ namespace SellerOps.App.Views
                 .ToList();
         }
 
+        private void RefreshReports()
+        {
+            var from = (FromDate.SelectedDate ?? DateTime.Today.AddDays(-7)).Date;
+            var to = (ToDate.SelectedDate ?? DateTime.Today).Date;
+
+            ReportsGrid.ItemsSource = _db.WbImportLogs.AsNoTracking()
+                .Where(x => x.Kind.StartsWith("statistics_") && x.Day >= from && x.Day <= to)
+                .OrderByDescending(x => x.ImportedAtUtc)
+                .ToList();
+        }
+
         // ---------------- Column formatting ----------------
+
+        private void SummaryGrid_AutoGeneratingColumn(object sender, DataGridAutoGeneratingColumnEventArgs e)
+            => FormatAutoColumn(e);
 
         private void RealGrid_AutoGeneratingColumn(object sender, DataGridAutoGeneratingColumnEventArgs e)
             => FormatAutoColumn(e);
 
         private void StockGrid_AutoGeneratingColumn(object sender, DataGridAutoGeneratingColumnEventArgs e)
+            => FormatAutoColumn(e);
+
+        private void ReportsGrid_AutoGeneratingColumn(object sender, DataGridAutoGeneratingColumnEventArgs e)
             => FormatAutoColumn(e);
 
         private static void FormatAutoColumn(DataGridAutoGeneratingColumnEventArgs e)
@@ -214,6 +235,29 @@ namespace SellerOps.App.Views
                 "PpvzForPay" => "К перечислению",
                 "PpvzSalesCommission" => "Комиссия",
                 "SnapshotAt" => "Снимок",
+                "NmId" => "Номенклатура (NM ID)",
+                "Title" => "Наименование",
+                "Article" => "Артикул продавца",
+                "Qty" => "Количество",
+                "RevenueToPay" => "К перечислению",
+                "Commission" => "Комиссия",
+                "Delivery" => "Логистика",
+                "Storage" => "Хранение",
+                "Penalties" => "Штрафы",
+                "Deductions" => "Удержания",
+                "DirectWBFees" => "Прямые расходы WB",
+                "Cost" => "Себестоимость",
+                "Prep" => "Подготовка",
+                "Ads" => "Реклама",
+                "NetProfit" => "Чистая прибыль",
+                "MarginPct" => "Маржа, %",
+                "Id" => "ID",
+                "Kind" => "Тип отчёта",
+                "Day" => "Дата отчёта",
+                "ImportedAtUtc" => "Импортировано (UTC)",
+                "IsComplete" => "Завершено",
+                "AddedRows" => "Строк",
+                "MaxRrdId" => "Макс. RRD ID",
                 _ => name
             };
         }

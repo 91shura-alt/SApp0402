@@ -100,6 +100,7 @@
             <TabItem x:Name="SummaryTab" Header="Сводка">
                 <DataGrid x:Name="SummaryGrid"
                           AutoGenerateColumns="True"
+                          AutoGeneratingColumn="SummaryGrid_AutoGeneratingColumn"
                           IsReadOnly="True"
                           CanUserAddRows="False"
                           CanUserDeleteRows="False"/>
@@ -108,6 +109,7 @@
             <TabItem x:Name="RealsTab" Header="Реализации (сырые)">
                 <DataGrid x:Name="RealGrid"
                           AutoGenerateColumns="True"
+                          AutoGeneratingColumn="RealGrid_AutoGeneratingColumn"
                           IsReadOnly="True"
                           CanUserAddRows="False"
                           CanUserDeleteRows="False"/>
@@ -116,6 +118,16 @@
             <TabItem x:Name="StocksTab" Header="Остатки (снимки)">
                 <DataGrid x:Name="StockGrid"
                           AutoGenerateColumns="True"
+                          AutoGeneratingColumn="StockGrid_AutoGeneratingColumn"
+                          IsReadOnly="True"
+                          CanUserAddRows="False"
+                          CanUserDeleteRows="False"/>
+            </TabItem>
+
+            <TabItem x:Name="ReportsTab" Header="Прочие отчёты (журнал)">
+                <DataGrid x:Name="ReportsGrid"
+                          AutoGenerateColumns="True"
+                          AutoGeneratingColumn="ReportsGrid_AutoGeneratingColumn"
                           IsReadOnly="True"
                           CanUserAddRows="False"
                           CanUserDeleteRows="False"/>

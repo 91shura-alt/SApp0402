@@ -346,7 +346,14 @@ namespace SellerOps.App.Services
                     continue;
                 }
 
-                throw new InvalidOperationException($"WB Statistics {url} вернул {resp.StatusCode}. См. WbRawFiles/logs.");
+                var bodySnippet = string.IsNullOrWhiteSpace(body)
+                    ? "(пустой ответ)"
+                    : body.Length > 300 ? body.Substring(0, 300) + "..." : body;
+
+                throw new InvalidOperationException(
+                    $"WB Statistics временно ограничил запросы ({(int)resp.StatusCode} {resp.StatusCode}). " +
+                    $"Endpoint: {url}. Попробуйте уменьшить диапазон дат или повторить позже. " +
+                    $"Детали ответа: {bodySnippet}. См. WbRawFiles/logs.");
             }
 
             throw new InvalidOperationException("WB Statistics: превышено число повторных попыток при 429 TooManyRequests.");
