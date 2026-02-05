@@ -67,6 +67,18 @@ namespace SellerOps.App.Views
             RefreshStocks();
         }
 
+        private async void LoadReports_Click(object sender, RoutedEventArgs e)
+        {
+            var from = (FromDate.SelectedDate ?? DateTime.Today.AddDays(-7)).Date;
+            var to = (ToDate.SelectedDate ?? DateTime.Today).Date;
+
+            await RunBusyAsync("Загружаю прочие отчёты WB…", async ct =>
+            {
+                var saved = await _stat.ImportAdditionalStatisticsReportsByPeriodAsync(from, to, ct);
+                BusyText.Text = $"Готово. Строк в прочих отчётах: {saved}";
+            });
+        }
+
         private void BuildSummary_Click(object sender, RoutedEventArgs e)
         {
             Tabs.SelectedItem = SummaryTab;
@@ -110,6 +122,7 @@ namespace SellerOps.App.Views
 
             LoadRealBtn.IsEnabled = !isBusy;
             LoadStocksBtn.IsEnabled = !isBusy;
+            LoadReportsBtn.IsEnabled = !isBusy;
             BuildSummaryBtn.IsEnabled = !isBusy;
 
             FromDate.IsEnabled = !isBusy;
