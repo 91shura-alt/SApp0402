@@ -15,6 +15,23 @@
 
         <!-- Контент -->
         <StackPanel Grid.Row="1" MaxWidth="820">
+            <TextBlock Text="База данных" FontSize="22" FontWeight="Bold" Margin="0,0,0,12"/>
+            <TextBlock Text="Полный путь к файлу .db" Margin="0,0,0,4"/>
+            <TextBox x:Name="DbPathBox" Margin="0,0,0,8" TextChanged="DbPathBox_TextChanged"/>
+
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                <Button Content="Выбрать файл базы" Click="SelectDbPath_Click" Width="180" Margin="0,0,8,0"/>
+                <Button Content="Открыть папку" Click="OpenDbFolder_Click" Width="140" Margin="0,0,8,0"/>
+                <Button Content="Сохранить путь" Click="SaveDbPath_Click" Width="140"/>
+            </StackPanel>
+
+            <TextBlock x:Name="DbPathWarningText"
+                       Foreground="DarkOrange"
+                       TextWrapping="Wrap"
+                       Margin="0,0,0,16"
+                       Visibility="Collapsed"
+                       Text="Внимание: путь внутри облачного диска. Не запускайте приложение одновременно на двух ПК."/>
+
             <TextBlock Text="Токены WB API" FontSize="22" FontWeight="Bold" Margin="0,0,0,16"/>
 
             <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
