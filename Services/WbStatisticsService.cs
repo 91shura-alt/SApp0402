@@ -9,11 +9,16 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Net;
+using System.Net.Http;
 
 namespace SellerOps.App.Services
 {
     public class WbStatisticsService
     {
+        private const int Max429Retries = 5;
+        private static readonly TimeSpan MinRequestInterval = TimeSpan.FromMilliseconds(350);
+
         private readonly AppDbContext _db;
         private readonly WbHttpClientFactory _http = new();
 
@@ -96,15 +101,12 @@ namespace SellerOps.App.Services
                     $"&dateTo={day:yyyy-MM-dd}" +
                     $"&rrdid={maxRrdId}";
 
-                using var resp = await http.GetAsync(url, ct);
-                var body = await resp.Content.ReadAsStringAsync(ct);
-
-                await SaveRawAsync("statistics_realizations",
-                    $"statistics_realizations_{day:yyyyMMdd}_rrdid{maxRrdId}_p{page:000}_{DateTime.UtcNow:HHmmss}.json",
-                    body, ct);
-
-                if (!resp.IsSuccessStatusCode)
-                    throw new InvalidOperationException($"WB Statistics (реализации) вернул {resp.StatusCode}. См. logs.");
+                var body = await GetWithRetryRawAsync(
+                    http,
+                    url,
+                    "statistics_realizations",
+                    $"statistics_realizations_{day:yyyyMMdd}_rrdid{maxRrdId}_p{page:000}",
+                    ct);
 
                 if (string.IsNullOrWhiteSpace(body) || body.Trim() == "[]")
                 {
@@ -186,6 +188,8 @@ namespace SellerOps.App.Services
                 _db.WbRealizationLines.AddRange(batch);
                 saved += batch.Count;
                 await _db.SaveChangesAsync(ct);
+
+                await Task.Delay(MinRequestInterval, ct);
             }
 
             UpsertImportLog("realizations", day, saved, maxRrdId, isComplete);
@@ -204,15 +208,12 @@ namespace SellerOps.App.Services
             using var http = _http.Create(baseUrl, token, bearerHeader: false);
 
             var url = $"{baseUrl}/api/v1/supplier/stocks?dateFrom={at:yyyy-MM-ddTHH:mm:ssZ}";
-
-            using var resp = await http.GetAsync(url, ct);
-            var body = await resp.Content.ReadAsStringAsync(ct);
-
-            await SaveRawAsync("statistics_stocks",
-                $"statistics_stocks_{at:yyyyMMdd_HHmmss}.json", body, ct);
-
-            if (!resp.IsSuccessStatusCode)
-                throw new InvalidOperationException($"WB Statistics (остатки) вернул {resp.StatusCode}. См. logs.");
+            var body = await GetWithRetryRawAsync(
+                http,
+                url,
+                "statistics_stocks",
+                $"statistics_stocks_{at:yyyyMMdd_HHmmss}",
+                ct);
 
             using var doc = JsonDocument.Parse(body);
             if (doc.RootElement.ValueKind != JsonValueKind.Array)
@@ -265,6 +266,43 @@ namespace SellerOps.App.Services
             return rows.Count;
         }
 
+        public async Task<int> ImportAdditionalStatisticsReportsByPeriodAsync(DateTime from, DateTime to, CancellationToken ct = default)
+        {
+            if (to < from) (from, to) = (to, from);
+
+            var (token, baseUrl) = GetCreds("Statistics");
+            using var http = _http.Create(baseUrl, token, bearerHeader: false);
+
+            var reports = new (string kind, string endpoint)[]
+            {
+                ("statistics_orders", "/api/v1/supplier/orders"),
+                ("statistics_sales", "/api/v1/supplier/sales"),
+                ("statistics_incomes", "/api/v1/supplier/incomes"),
+            };
+
+            var saved = 0;
+            foreach (var report in reports)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                var url = $"{baseUrl}{report.endpoint}?dateFrom={from:yyyy-MM-dd}";
+                var body = await GetWithRetryRawAsync(
+                    http,
+                    url,
+                    report.kind,
+                    $"{report.kind}_{from:yyyyMMdd}_{to:yyyyMMdd}",
+                    ct);
+
+                UpsertImportLog(report.kind, to.Date, ParseArrayLen(body), 0, true);
+                await _db.SaveChangesAsync(ct);
+                saved += ParseArrayLen(body);
+
+                await Task.Delay(MinRequestInterval, ct);
+            }
+
+            return saved;
+        }
+
         // ---------------- IMPORT LOG ----------------
 
         private void UpsertImportLog(string kind, DateTime day, int addedRows, long maxRrdId, bool isComplete)
@@ -284,6 +322,66 @@ namespace SellerOps.App.Services
             row.IsComplete = isComplete;
             row.AddedRows = addedRows;
             row.MaxRrdId = maxRrdId;
+        }
+
+        private async Task<string> GetWithRetryRawAsync(HttpClient http, string url, string rawKind, string filePrefix, CancellationToken ct)
+        {
+            for (var attempt = 1; attempt <= Max429Retries; attempt++)
+            {
+                using var resp = await http.GetAsync(url, ct);
+                var body = await resp.Content.ReadAsStringAsync(ct);
+
+                await SaveRawAsync(rawKind,
+                    $"{filePrefix}_try{attempt}_{DateTime.UtcNow:HHmmss}.json",
+                    body,
+                    ct);
+
+                if (resp.IsSuccessStatusCode)
+                    return body;
+
+                if (resp.StatusCode == HttpStatusCode.TooManyRequests && attempt < Max429Retries)
+                {
+                    var delay = GetRetryDelay(resp, attempt);
+                    await Task.Delay(delay, ct);
+                    continue;
+                }
+
+                throw new InvalidOperationException($"WB Statistics {url} вернул {resp.StatusCode}. См. WbRawFiles/logs.");
+            }
+
+            throw new InvalidOperationException("WB Statistics: превышено число повторных попыток при 429 TooManyRequests.");
+        }
+
+        private static TimeSpan GetRetryDelay(HttpResponseMessage resp, int attempt)
+        {
+            var retryAfter = resp.Headers.RetryAfter;
+            if (retryAfter?.Delta is TimeSpan delta && delta > TimeSpan.Zero)
+                return delta;
+
+            if (retryAfter?.Date is DateTimeOffset date)
+            {
+                var value = date - DateTimeOffset.UtcNow;
+                if (value > TimeSpan.Zero) return value;
+            }
+
+            var seconds = Math.Min(30, (int)Math.Pow(2, attempt));
+            return TimeSpan.FromSeconds(seconds);
+        }
+
+        private static int ParseArrayLen(string json)
+        {
+            if (string.IsNullOrWhiteSpace(json)) return 0;
+            try
+            {
+                using var doc = JsonDocument.Parse(json);
+                return doc.RootElement.ValueKind == JsonValueKind.Array
+                    ? doc.RootElement.GetArrayLength()
+                    : 0;
+            }
+            catch
+            {
+                return 0;
+            }
         }
 
         // ---------------- helpers ----------------
