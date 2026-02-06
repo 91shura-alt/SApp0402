@@ -38,7 +38,10 @@ namespace SellerOps.App.Services
             if (row == null)
                 throw new InvalidOperationException($"Не найден токен для категории '{category}'. Добавь токен в настройках WB.");
 
-            var token = SecureStorage.Unprotect(row.EncryptedToken)?.Trim();
+            if (!SecureStorage.TryUnprotect(row.EncryptedToken, out var token))
+                throw new InvalidOperationException("Токен Marketplace был сохранён на другом ПК/пользователе. Пересохраните токен в настройках WB.");
+
+            token = token?.Trim();
             if (string.IsNullOrWhiteSpace(token))
                 throw new InvalidOperationException($"Токен категории '{category}' пустой/не расшифровался.");
 
