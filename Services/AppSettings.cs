@@ -7,6 +7,7 @@ namespace SellerOps.App.Services
     public sealed class AppSettings
     {
         public string? DatabasePath { get; set; }
+        public bool StoreTokensAsPlainText { get; set; }
 
         public static AppSettings Instance { get; } = Load();
 

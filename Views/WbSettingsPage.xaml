@@ -32,6 +32,12 @@
                        Visibility="Collapsed"
                        Text="Внимание: путь внутри облачного диска. Не запускайте приложение одновременно на двух ПК."/>
 
+            <CheckBox x:Name="PlainTokensBox"
+                      Content="Хранить токены без шифрования (для облака/нескольких ПК)"
+                      Margin="0,0,0,16"
+                      Checked="PlainTokensBox_Checked"
+                      Unchecked="PlainTokensBox_Checked"/>
+
             <TextBlock Text="Токены WB API" FontSize="22" FontWeight="Bold" Margin="0,0,0,16"/>
 
             <StackPanel Orientation="Horizontal" Margin="0,0,0,8">

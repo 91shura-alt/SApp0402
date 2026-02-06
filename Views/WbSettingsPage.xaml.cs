@@ -21,6 +21,7 @@ namespace SellerOps.App.Views
         {
             InitializeComponent();
             LoadDbSettings();
+            LoadTokenSettings();
             LoadTokens();
         }
 
@@ -31,6 +32,17 @@ namespace SellerOps.App.Views
                 ? AppSettings.DefaultDatabasePath
                 : Path.GetFullPath(configured);
             UpdateDbPathWarning(DbPathBox.Text);
+        }
+
+        private void LoadTokenSettings()
+        {
+            PlainTokensBox.IsChecked = AppSettings.Instance.StoreTokensAsPlainText;
+        }
+
+        private void PlainTokensBox_Checked(object sender, RoutedEventArgs e)
+        {
+            AppSettings.Instance.StoreTokensAsPlainText = PlainTokensBox.IsChecked == true;
+            AppSettings.Instance.Save();
         }
 
         private void SaveDbPath_Click(object sender, RoutedEventArgs e)
@@ -215,7 +227,12 @@ namespace SellerOps.App.Views
 
                 if (TokensGrid.SelectedItem is ApiToken row)
                 {
-                    token = SecureStorage.Unprotect(row.EncryptedToken);
+                    if (!SecureStorage.TryUnprotect(row.EncryptedToken, out token))
+                    {
+                        MessageBox.Show("Токен был сохранён на другом ПК/пользователе. Пересохраните токен в настройках WB.");
+                        return;
+                    }
+
                     category = row.Category;
                     sandbox = row.IsSandbox;
                     supplierId = row.SupplierId;

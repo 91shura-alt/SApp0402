@@ -36,7 +36,10 @@ namespace SellerOps.App.Services
             if (row == null)
                 throw new InvalidOperationException($"Не найден токен категории '{kind}'. Открой настройки и добавь токен.");
 
-            var token = (SecureStorage.Unprotect(row.EncryptedToken) ?? "").Trim();
+            if (!SecureStorage.TryUnprotect(row.EncryptedToken, out var token))
+                throw new InvalidOperationException($"Токен категории '{kind}' был сохранён на другом ПК/пользователе. Пересохраните токен в настройках WB.");
+
+            token = (token ?? "").Trim();
             if (string.IsNullOrWhiteSpace(token))
                 throw new InvalidOperationException($"Токен категории '{kind}' пустой/не расшифровался. Открой WB настройки и добавь токен заново.");
 
