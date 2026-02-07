@@ -118,6 +118,14 @@ CREATE TABLE IF NOT EXISTS ""WbImportLogs"" (
     ""MaxRrdId"" INTEGER NOT NULL DEFAULT 0
 );");
 
+            EnsureTable(con, "SyncStates", @"
+CREATE TABLE IF NOT EXISTS ""SyncStates"" (
+    ""Id"" INTEGER NOT NULL CONSTRAINT ""PK_SyncStates"" PRIMARY KEY AUTOINCREMENT,
+    ""Key"" TEXT NOT NULL,
+    ""LastSyncUtc"" TEXT NULL,
+    ""LastValueText"" TEXT NULL
+);");
+
             // ----------------------------
             // Колонки (добавляем всё, что могло появиться в моделях позже)
             // ----------------------------
@@ -261,6 +269,12 @@ CREATE TABLE IF NOT EXISTS ""WbPriceQuarantineGoods"" (
             FixTextNullToEmpty(con, "WbPriceQuarantineGoods", "VendorCode");
             FixTextNullToEmpty(con, "WbPriceQuarantineGoods", "Reason");
             FixTextNullToEmpty(con, "WbPriceQuarantineGoods", "RawJson");
+
+            EnsureColumn(con, "SyncStates", "Key", "TEXT");
+            EnsureColumn(con, "SyncStates", "LastSyncUtc", "TEXT");
+            EnsureColumn(con, "SyncStates", "LastValueText", "TEXT");
+            FixTextNullToEmpty(con, "SyncStates", "Key");
+            ExecNonQuery(con, @"CREATE UNIQUE INDEX IF NOT EXISTS IX_SyncStates_Key ON SyncStates(Key);");
 
             // --- WbRealizationLines ---
             EnsureColumn(con, "WbRealizationLines", "RawJson", "TEXT");
