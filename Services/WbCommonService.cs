@@ -45,7 +45,10 @@ namespace SellerOps.App.Services
             if (row == null)
                 throw new InvalidOperationException("Не найден ни один токен WB. Открой WB настройки и добавь токен.");
 
-            var token = SecureStorage.Unprotect(row.EncryptedToken)?.Trim();
+            if (!SecureStorage.TryUnprotect(row.EncryptedToken, out var token))
+                throw new InvalidOperationException("Токен WB был сохранён на другом ПК/пользователе. Пересохраните токен в настройках WB или включите режим хранения без шифрования.");
+
+            token = token?.Trim();
             if (string.IsNullOrWhiteSpace(token))
                 throw new InvalidOperationException("Токен пустой/не расшифровался. Открой WB настройки и добавь токен заново.");
 

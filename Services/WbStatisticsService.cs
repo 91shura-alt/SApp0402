@@ -29,6 +29,19 @@ namespace SellerOps.App.Services
 
         private (string token, string baseUrl) GetCreds(string kind)
         {
+            if (kind == "Statistics" && !string.IsNullOrWhiteSpace(AppSettings.Instance.EncryptedStatisticsToken))
+            {
+                var token = (SecureStorage.Unprotect(AppSettings.Instance.EncryptedStatisticsToken) ?? "").Trim();
+                if (string.IsNullOrWhiteSpace(token))
+                    throw new InvalidOperationException("Локальный токен 'Statistics' пустой/не расшифровался. Открой WB настройки и сохрани токен заново.");
+
+                var baseUrl = AppSettings.Instance.StatisticsIsSandbox
+                    ? "https://statistics-api-sandbox.wildberries.ru"
+                    : "https://statistics-api.wildberries.ru";
+
+                return (token, baseUrl);
+            }
+
             var row = _db.ApiTokens.AsNoTracking()
                 .OrderByDescending(x => x.Id)
                 .FirstOrDefault(x => x.Category == kind);
@@ -36,7 +49,10 @@ namespace SellerOps.App.Services
             if (row == null)
                 throw new InvalidOperationException($"Не найден токен категории '{kind}'. Открой настройки и добавь токен.");
 
-            var token = (SecureStorage.Unprotect(row.EncryptedToken) ?? "").Trim();
+            if (!SecureStorage.TryUnprotect(row.EncryptedToken, out var token))
+                throw new InvalidOperationException($"Токен категории '{kind}' был сохранён на другом ПК/пользователе. Пересохраните токен в настройках WB или включите режим хранения без шифрования.");
+
+            token = (token ?? "").Trim();
             if (string.IsNullOrWhiteSpace(token))
                 throw new InvalidOperationException($"Токен категории '{kind}' пустой/не расшифровался. Открой WB настройки и добавь токен заново.");
 
@@ -59,6 +75,20 @@ namespace SellerOps.App.Services
             await _db.SaveChangesAsync(ct);
         }
 
+        private async Task UpsertSyncStateAsync(string key, DateTime? lastSyncUtc, string? lastValue, CancellationToken ct)
+        {
+            var row = await _db.SyncStates.FirstOrDefaultAsync(x => x.Key == key, ct);
+            if (row == null)
+            {
+                row = new SyncState { Key = key };
+                _db.SyncStates.Add(row);
+            }
+
+            row.LastSyncUtc = lastSyncUtc;
+            row.LastValueText = lastValue;
+            await _db.SaveChangesAsync(ct);
+        }
+
         // ---------------- REALIZATIONS ----------------
 
         public async Task<int> ImportRealizationByPeriodAsync(DateTime from, DateTime to, string reason, CancellationToken ct = default)
@@ -72,6 +102,8 @@ namespace SellerOps.App.Services
                 ct.ThrowIfCancellationRequested();
                 totalSaved += await ImportRealizationForDayAsync(day, ct);
             }
+
+            await UpsertSyncStateAsync("realizations_last_range", DateTime.UtcNow, $"{from:O}|{to:O}", ct);
 
             return totalSaved;
         }
@@ -214,6 +246,8 @@ namespace SellerOps.App.Services
                 "statistics_stocks",
                 $"statistics_stocks_{at:yyyyMMdd_HHmmss}",
                 ct);
+
+            await UpsertSyncStateAsync("statistics_stocks", DateTime.UtcNow, at.ToString("O"), ct);
 
             using var doc = JsonDocument.Parse(body);
             if (doc.RootElement.ValueKind != JsonValueKind.Array)

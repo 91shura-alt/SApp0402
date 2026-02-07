@@ -21,6 +21,7 @@ namespace SellerOps.App.Views
         {
             InitializeComponent();
             LoadDbSettings();
+            LoadTokenSettingsInternal();
             LoadTokens();
         }
 
@@ -31,6 +32,36 @@ namespace SellerOps.App.Views
                 ? AppSettings.DefaultDatabasePath
                 : Path.GetFullPath(configured);
             UpdateDbPathWarning(DbPathBox.Text);
+
+            DefaultPeriodDaysBox.Text = (AppSettings.Instance.DefaultPeriodDays > 0
+                ? AppSettings.Instance.DefaultPeriodDays
+                : 7).ToString();
+        }
+
+        private void LoadTokenSettingsInternal()
+        {
+            PlainTokensBox.IsChecked = AppSettings.Instance.StoreTokensAsPlainText;
+        }
+
+        private void PlainTokensBox_Toggled(object sender, RoutedEventArgs e)
+        {
+            AppSettings.Instance.StoreTokensAsPlainText = PlainTokensBox.IsChecked == true;
+            AppSettings.Instance.Save();
+
+            MessageBox.Show(
+                "Режим без шифрования влияет только на новые сохранения токенов. " +
+                "Чтобы токены стали общими для двух ПК, пересохраните их в таблице токенов.",
+                "WB API", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        private void DefaultPeriodDaysBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            var raw = (DefaultPeriodDaysBox.Text ?? string.Empty).Trim();
+            if (!int.TryParse(raw, out var days) || days <= 0 || days > 365)
+                return;
+
+            AppSettings.Instance.DefaultPeriodDays = days;
+            AppSettings.Instance.Save();
         }
 
         private void SaveDbPath_Click(object sender, RoutedEventArgs e)
@@ -47,6 +78,8 @@ namespace SellerOps.App.Views
             }
 
             var fullPath = Path.GetFullPath(raw);
+            if (Directory.Exists(fullPath) || string.IsNullOrWhiteSpace(Path.GetExtension(fullPath)))
+                fullPath = Path.Combine(fullPath, "sellerops.db");
             AppSettings.Instance.DatabasePath = fullPath;
             AppSettings.Instance.Save();
             DbPathBox.Text = fullPath;
@@ -175,6 +208,8 @@ namespace SellerOps.App.Views
 
                 var enc = SecureStorage.Protect(token);
 
+                SaveLocalToken(category, enc, sandbox);
+
                 var model = new ApiToken
                 {
                     Category = category,
@@ -198,6 +233,33 @@ namespace SellerOps.App.Views
             }
         }
 
+        private static void SaveLocalToken(string category, string encryptedToken, bool sandbox)
+        {
+            var settings = AppSettings.Instance;
+
+            switch (category)
+            {
+                case "Content":
+                    settings.EncryptedContentToken = encryptedToken;
+                    settings.ContentIsSandbox = sandbox;
+                    break;
+                case "Statistics":
+                    settings.EncryptedStatisticsToken = encryptedToken;
+                    settings.StatisticsIsSandbox = sandbox;
+                    break;
+                case "Analytics":
+                    settings.EncryptedAnalyticsToken = encryptedToken;
+                    settings.AnalyticsIsSandbox = sandbox;
+                    break;
+                case "Marketplace":
+                    settings.EncryptedMarketplaceToken = encryptedToken;
+                    settings.MarketplaceIsSandbox = sandbox;
+                    break;
+            }
+
+            settings.Save();
+        }
+
         /// <summary>
         /// Проверяем реальным контент-методом (list 1 карточка), а не /ping.
         /// Пробуем сперва Authorization: <token>, затем — Bearer fallback.
@@ -215,7 +277,12 @@ namespace SellerOps.App.Views
 
                 if (TokensGrid.SelectedItem is ApiToken row)
                 {
-                    token = SecureStorage.Unprotect(row.EncryptedToken);
+                    if (!SecureStorage.TryUnprotect(row.EncryptedToken, out token))
+                    {
+                        MessageBox.Show("Токен был сохранён на другом ПК/пользователе. Пересохраните токен или включите режим хранения без шифрования.");
+                        return;
+                    }
+
                     category = row.Category;
                     sandbox = row.IsSandbox;
                     supplierId = row.SupplierId;
