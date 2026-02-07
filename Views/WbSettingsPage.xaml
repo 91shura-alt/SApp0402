@@ -38,8 +38,8 @@
             <CheckBox x:Name="PlainTokensBox"
                       Content="Хранить токены без шифрования (для работы на двух ПК)"
                       Margin="0,0,0,8"
-                      Checked="PlainTokensBox_Checked"
-                      Unchecked="PlainTokensBox_Checked"/>
+                      Checked="PlainTokensBox_Toggled"
+                      Unchecked="PlainTokensBox_Toggled"/>
 
             <TextBlock Text="Режим без шифрования позволяет переносить токены между ПК, но снижает безопасность."
                        Foreground="Gray"

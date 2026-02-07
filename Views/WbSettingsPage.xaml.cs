@@ -21,7 +21,7 @@ namespace SellerOps.App.Views
         {
             InitializeComponent();
             LoadDbSettings();
-            LoadTokenSettings();
+            LoadTokenSettingsInternal();
             LoadTokens();
         }
 
@@ -38,12 +38,12 @@ namespace SellerOps.App.Views
                 : 7).ToString();
         }
 
-        private void LoadTokenSettings()
+        private void LoadTokenSettingsInternal()
         {
             PlainTokensBox.IsChecked = AppSettings.Instance.StoreTokensAsPlainText;
         }
 
-        private void PlainTokensBox_Checked(object sender, RoutedEventArgs e)
+        private void PlainTokensBox_Toggled(object sender, RoutedEventArgs e)
         {
             AppSettings.Instance.StoreTokensAsPlainText = PlainTokensBox.IsChecked == true;
             AppSettings.Instance.Save();
@@ -61,17 +61,6 @@ namespace SellerOps.App.Views
                 return;
 
             AppSettings.Instance.DefaultPeriodDays = days;
-            AppSettings.Instance.Save();
-        }
-
-        private void LoadTokenSettings()
-        {
-            PlainTokensBox.IsChecked = AppSettings.Instance.StoreTokensAsPlainText;
-        }
-
-        private void PlainTokensBox_Checked(object sender, RoutedEventArgs e)
-        {
-            AppSettings.Instance.StoreTokensAsPlainText = PlainTokensBox.IsChecked == true;
             AppSettings.Instance.Save();
         }
 
