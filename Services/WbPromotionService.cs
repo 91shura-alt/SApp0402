@@ -64,7 +64,11 @@ namespace SellerOps.App.Services
         public async Task<int> RefreshPromotionsForNmIdAsync(long nmId, CancellationToken ct = default)
         {
             var (token, baseUrl) = GetCreds();
-            var payload = await GetPromotionsRawAsync(baseUrl, token, ct);
+            var advertIds = await GetPromotionAdvertIdsAsync(baseUrl, token, ct);
+            if (advertIds.Count == 0)
+                throw new InvalidOperationException("WB Promotion: не удалось получить список кампаний (advertIds).");
+
+            var payload = await GetPromotionsRawAsync(baseUrl, token, advertIds, ct);
 
             var parsed = ParsePromotions(payload, nmId);
 
@@ -84,10 +88,35 @@ namespace SellerOps.App.Services
             return parsed.Count;
         }
 
-        private async Task<string> GetPromotionsRawAsync(string baseUrl, string token, CancellationToken ct)
+        private async Task<List<long>> GetPromotionAdvertIdsAsync(string baseUrl, string token, CancellationToken ct)
         {
             using var http = _http.Create(baseUrl, token, bearerHeader: false);
-            using var resp = await http.PostAsync("/adv/v1/promotion/adverts", new StringContent("{}", System.Text.Encoding.UTF8, "application/json"), ct);
+            using var resp = await http.GetAsync("/adv/v1/promotion/count", ct);
+            var payload = await resp.Content.ReadAsStringAsync(ct);
+
+            if (resp.IsSuccessStatusCode)
+                return ExtractAdvertIds(payload);
+
+            if ((int)resp.StatusCode == 401)
+            {
+                using var httpBearer = _http.Create(baseUrl, token, bearerHeader: true);
+                using var respBearer = await httpBearer.GetAsync("/adv/v1/promotion/count", ct);
+                var payloadBearer = await respBearer.Content.ReadAsStringAsync(ct);
+
+                if (respBearer.IsSuccessStatusCode)
+                    return ExtractAdvertIds(payloadBearer);
+
+                throw new InvalidOperationException($"WB Promotion count вернул {(int)respBearer.StatusCode}. {payloadBearer}");
+            }
+
+            throw new InvalidOperationException($"WB Promotion count вернул {(int)resp.StatusCode}. {payload}");
+        }
+
+        private async Task<string> GetPromotionsRawAsync(string baseUrl, string token, IReadOnlyCollection<long> advertIds, CancellationToken ct)
+        {
+            var json = JsonSerializer.Serialize(advertIds);
+            using var http = _http.Create(baseUrl, token, bearerHeader: false);
+            using var resp = await http.PostAsync("/adv/v1/promotion/adverts", new StringContent(json, System.Text.Encoding.UTF8, "application/json"), ct);
             var payload = await resp.Content.ReadAsStringAsync(ct);
 
             if (resp.IsSuccessStatusCode)
@@ -96,7 +125,7 @@ namespace SellerOps.App.Services
             if ((int)resp.StatusCode == 401)
             {
                 using var httpBearer = _http.Create(baseUrl, token, bearerHeader: true);
-                using var respBearer = await httpBearer.PostAsync("/adv/v1/promotion/adverts", new StringContent("{}", System.Text.Encoding.UTF8, "application/json"), ct);
+                using var respBearer = await httpBearer.PostAsync("/adv/v1/promotion/adverts", new StringContent(json, System.Text.Encoding.UTF8, "application/json"), ct);
                 var payloadBearer = await respBearer.Content.ReadAsStringAsync(ct);
 
                 if (respBearer.IsSuccessStatusCode)
@@ -106,6 +135,47 @@ namespace SellerOps.App.Services
             }
 
             throw new InvalidOperationException($"WB Promotion adverts вернул {(int)resp.StatusCode}. {payload}");
+        }
+
+        private static List<long> ExtractAdvertIds(string payload)
+        {
+            var result = new List<long>();
+            try
+            {
+                using var doc = JsonDocument.Parse(payload);
+                ExtractAdvertIds(doc.RootElement, result);
+            }
+            catch
+            {
+                return result;
+            }
+
+            return result.Distinct().ToList();
+        }
+
+        private static void ExtractAdvertIds(JsonElement element, List<long> result)
+        {
+            switch (element.ValueKind)
+            {
+                case JsonValueKind.Object:
+                    foreach (var prop in element.EnumerateObject())
+                    {
+                        if (prop.NameEquals("advertId") || prop.NameEquals("advert_id") || prop.NameEquals("id"))
+                        {
+                            if (prop.Value.ValueKind == JsonValueKind.Number && prop.Value.TryGetInt64(out var v))
+                                result.Add(v);
+                            else if (prop.Value.ValueKind == JsonValueKind.String && long.TryParse(prop.Value.GetString(), out var vs))
+                                result.Add(vs);
+                        }
+
+                        ExtractAdvertIds(prop.Value, result);
+                    }
+                    break;
+                case JsonValueKind.Array:
+                    foreach (var item in element.EnumerateArray())
+                        ExtractAdvertIds(item, result);
+                    break;
+            }
         }
 
         private static List<WbPromotionItem> ParsePromotions(string payload, long nmId)
