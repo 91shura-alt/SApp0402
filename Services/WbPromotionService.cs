@@ -61,6 +61,13 @@ namespace SellerOps.App.Services
             return (token!, baseUrl);
         }
 
+        private string GetCalendarBaseUrl()
+        {
+            return AppSettings.Instance.PromotionIsSandbox
+                ? "https://promotion-api-sandbox.wildberries.ru"
+                : "https://promotion-api.wildberries.ru";
+        }
+
         public async Task<int> RefreshPromotionsForNmIdAsync(long nmId, CancellationToken ct = default)
         {
             var (token, baseUrl) = GetCreds();
@@ -90,7 +97,8 @@ namespace SellerOps.App.Services
 
         public async Task<int> RefreshCalendarPromotionsForNmIdAsync(long nmId, CancellationToken ct = default)
         {
-            var (token, baseUrl) = GetCreds();
+            var (token, _) = GetCreds();
+            var baseUrl = GetCalendarBaseUrl();
             var payload = await GetCalendarPromotionsRawAsync(baseUrl, token, ct);
             var parsed = ParseCalendarPromotions(payload, nmId);
 
