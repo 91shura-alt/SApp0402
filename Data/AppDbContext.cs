@@ -80,6 +80,9 @@ namespace SellerOps.App.Data
         public DbSet<WbPriceSize> WbPriceSizes { get; set; } = null!;
         public DbSet<WbPriceQuarantineGood> WbPriceQuarantineGoods { get; set; } = null!;
 
+        // WB Promotion API (акции)
+        public DbSet<WbPromotionItem> WbPromotionItems { get; set; } = null!;
+
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
