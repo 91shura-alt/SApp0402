@@ -255,6 +255,20 @@ namespace SellerOps.App.Domain
         /// <summary>Последний rrd_id, который получили.</summary>
         public long MaxRrdId { get; set; }
     }
+
+    public class SyncState
+    {
+        [Key]
+        public int Id { get; set; }
+
+        [MaxLength(80)]
+        public string Key { get; set; } = "";
+
+        public DateTime? LastSyncUtc { get; set; }
+
+        [MaxLength(200)]
+        public string? LastValueText { get; set; }
+    }
     public class WbFbsOrder
     {
         public long Id { get; set; }

@@ -118,6 +118,14 @@ CREATE TABLE IF NOT EXISTS ""WbImportLogs"" (
     ""MaxRrdId"" INTEGER NOT NULL DEFAULT 0
 );");
 
+            EnsureTable(con, "SyncStates", @"
+CREATE TABLE IF NOT EXISTS ""SyncStates"" (
+    ""Id"" INTEGER NOT NULL CONSTRAINT ""PK_SyncStates"" PRIMARY KEY AUTOINCREMENT,
+    ""Key"" TEXT NOT NULL,
+    ""LastSyncUtc"" TEXT NULL,
+    ""LastValueText"" TEXT NULL
+);");
+
             // ----------------------------
             // Колонки (добавляем всё, что могло появиться в моделях позже)
             // ----------------------------
@@ -248,10 +256,24 @@ CREATE TABLE IF NOT EXISTS ""WbPriceQuarantineGoods"" (
     ""RawJson"" TEXT NOT NULL DEFAULT ''
 );");
 
+            EnsureTable(con, "WbPromotionItems", @"
+CREATE TABLE IF NOT EXISTS ""WbPromotionItems"" (
+    ""Id"" INTEGER NOT NULL CONSTRAINT ""PK_WbPromotionItems"" PRIMARY KEY AUTOINCREMENT,
+    ""NmId"" INTEGER NOT NULL,
+    ""PromotionId"" INTEGER NULL,
+    ""Name"" TEXT NOT NULL DEFAULT '',
+    ""RequiredDiscount"" TEXT NOT NULL DEFAULT '',
+    ""Status"" TEXT NOT NULL DEFAULT '',
+    ""Details"" TEXT NOT NULL DEFAULT '',
+    ""ImportedAtUtc"" TEXT NOT NULL,
+    ""RawJson"" TEXT NOT NULL DEFAULT ''
+);");
+
             // Индексы для ускорения выборок / upsert-логики
             ExecNonQuery(con, @"CREATE UNIQUE INDEX IF NOT EXISTS IX_WbPriceGoods_NmId ON WbPriceGoods(NmId);");
             ExecNonQuery(con, @"CREATE UNIQUE INDEX IF NOT EXISTS IX_WbPriceSizes_NmId_SizeId ON WbPriceSizes(NmId, SizeId);");
             ExecNonQuery(con, @"CREATE INDEX IF NOT EXISTS IX_WbPriceSizes_NmId ON WbPriceSizes(NmId);");
+            ExecNonQuery(con, @"CREATE INDEX IF NOT EXISTS IX_WbPromotionItems_NmId ON WbPromotionItems(NmId);");
 
             // Подстрахуемся от NULL в обязательных текстовых полях
             FixTextNullToEmpty(con, "WbPriceGoods", "VendorCode");
@@ -261,6 +283,17 @@ CREATE TABLE IF NOT EXISTS ""WbPriceQuarantineGoods"" (
             FixTextNullToEmpty(con, "WbPriceQuarantineGoods", "VendorCode");
             FixTextNullToEmpty(con, "WbPriceQuarantineGoods", "Reason");
             FixTextNullToEmpty(con, "WbPriceQuarantineGoods", "RawJson");
+            FixTextNullToEmpty(con, "WbPromotionItems", "Name");
+            FixTextNullToEmpty(con, "WbPromotionItems", "RequiredDiscount");
+            FixTextNullToEmpty(con, "WbPromotionItems", "Status");
+            FixTextNullToEmpty(con, "WbPromotionItems", "Details");
+            FixTextNullToEmpty(con, "WbPromotionItems", "RawJson");
+
+            EnsureColumn(con, "SyncStates", "Key", "TEXT");
+            EnsureColumn(con, "SyncStates", "LastSyncUtc", "TEXT");
+            EnsureColumn(con, "SyncStates", "LastValueText", "TEXT");
+            FixTextNullToEmpty(con, "SyncStates", "Key");
+            ExecNonQuery(con, @"CREATE UNIQUE INDEX IF NOT EXISTS IX_SyncStates_Key ON SyncStates(Key);");
 
             // --- WbRealizationLines ---
             EnsureColumn(con, "WbRealizationLines", "RawJson", "TEXT");
