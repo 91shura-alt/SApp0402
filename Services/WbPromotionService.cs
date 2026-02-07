@@ -114,27 +114,41 @@ namespace SellerOps.App.Services
 
         private async Task<string> GetPromotionsRawAsync(string baseUrl, string token, IReadOnlyCollection<long> advertIds, CancellationToken ct)
         {
-            var json = JsonSerializer.Serialize(advertIds);
-            using var http = _http.Create(baseUrl, token, bearerHeader: false);
-            using var resp = await http.PostAsync("/adv/v1/promotion/adverts", new StringContent(json, System.Text.Encoding.UTF8, "application/json"), ct);
-            var payload = await resp.Content.ReadAsStringAsync(ct);
+            var chunks = advertIds.Distinct().Chunk(50);
+            var responses = new List<string>();
 
-            if (resp.IsSuccessStatusCode)
-                return payload;
-
-            if ((int)resp.StatusCode == 401)
+            foreach (var chunk in chunks)
             {
-                using var httpBearer = _http.Create(baseUrl, token, bearerHeader: true);
-                using var respBearer = await httpBearer.PostAsync("/adv/v1/promotion/adverts", new StringContent(json, System.Text.Encoding.UTF8, "application/json"), ct);
-                var payloadBearer = await respBearer.Content.ReadAsStringAsync(ct);
+                var json = JsonSerializer.Serialize(chunk);
+                using var http = _http.Create(baseUrl, token, bearerHeader: false);
+                using var resp = await http.PostAsync("/adv/v1/promotion/adverts", new StringContent(json, System.Text.Encoding.UTF8, "application/json"), ct);
+                var payload = await resp.Content.ReadAsStringAsync(ct);
 
-                if (respBearer.IsSuccessStatusCode)
-                    return payloadBearer;
+                if (resp.IsSuccessStatusCode)
+                {
+                    responses.Add(payload);
+                    continue;
+                }
 
-                throw new InvalidOperationException($"WB Promotion adverts вернул {(int)respBearer.StatusCode}. {payloadBearer}");
+                if ((int)resp.StatusCode == 401)
+                {
+                    using var httpBearer = _http.Create(baseUrl, token, bearerHeader: true);
+                    using var respBearer = await httpBearer.PostAsync("/adv/v1/promotion/adverts", new StringContent(json, System.Text.Encoding.UTF8, "application/json"), ct);
+                    var payloadBearer = await respBearer.Content.ReadAsStringAsync(ct);
+
+                    if (respBearer.IsSuccessStatusCode)
+                    {
+                        responses.Add(payloadBearer);
+                        continue;
+                    }
+
+                    throw new InvalidOperationException($"WB Promotion adverts вернул {(int)respBearer.StatusCode}. {payloadBearer}");
+                }
+
+                throw new InvalidOperationException($"WB Promotion adverts вернул {(int)resp.StatusCode}. {payload}");
             }
 
-            throw new InvalidOperationException($"WB Promotion adverts вернул {(int)resp.StatusCode}. {payload}");
+            return $"[{string.Join(',', responses)}]";
         }
 
         private static List<long> ExtractAdvertIds(string payload)
