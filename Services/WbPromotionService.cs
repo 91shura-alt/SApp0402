@@ -87,7 +87,7 @@ namespace SellerOps.App.Services
         private async Task<string> GetPromotionsRawAsync(string baseUrl, string token, CancellationToken ct)
         {
             using var http = _http.Create(baseUrl, token, bearerHeader: false);
-            using var resp = await http.GetAsync("/adv/v1/promotion/adverts", ct);
+            using var resp = await http.PostAsync("/adv/v1/promotion/adverts", new StringContent("{}", System.Text.Encoding.UTF8, "application/json"), ct);
             var payload = await resp.Content.ReadAsStringAsync(ct);
 
             if (resp.IsSuccessStatusCode)
@@ -96,7 +96,7 @@ namespace SellerOps.App.Services
             if ((int)resp.StatusCode == 401)
             {
                 using var httpBearer = _http.Create(baseUrl, token, bearerHeader: true);
-                using var respBearer = await httpBearer.GetAsync("/adv/v1/promotion/adverts", ct);
+                using var respBearer = await httpBearer.PostAsync("/adv/v1/promotion/adverts", new StringContent("{}", System.Text.Encoding.UTF8, "application/json"), ct);
                 var payloadBearer = await respBearer.Content.ReadAsStringAsync(ct);
 
                 if (respBearer.IsSuccessStatusCode)
