@@ -295,6 +295,12 @@ CREATE TABLE IF NOT EXISTS ""WbPromotionItems"" (
             FixTextNullToEmpty(con, "SyncStates", "Key");
             ExecNonQuery(con, @"CREATE UNIQUE INDEX IF NOT EXISTS IX_SyncStates_Key ON SyncStates(Key);");
 
+            EnsureColumn(con, "SyncStates", "Key", "TEXT");
+            EnsureColumn(con, "SyncStates", "LastSyncUtc", "TEXT");
+            EnsureColumn(con, "SyncStates", "LastValueText", "TEXT");
+            FixTextNullToEmpty(con, "SyncStates", "Key");
+            ExecNonQuery(con, @"CREATE UNIQUE INDEX IF NOT EXISTS IX_SyncStates_Key ON SyncStates(Key);");
+
             // --- WbRealizationLines ---
             EnsureColumn(con, "WbRealizationLines", "RawJson", "TEXT");
             EnsureColumn(con, "WbRealizationLines", "OrderDt", "TEXT");
