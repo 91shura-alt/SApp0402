@@ -186,8 +186,7 @@ namespace SellerOps.App.Services
         private async Task<string> GetCalendarPromotionsRawAsync(string baseUrl, string token, CancellationToken ct)
         {
             const int maxAttempts = 6;
-            var (startDateTime, endDateTime) = GetCalendarRange();
-            var url = $"/api/v1/calendar/promotions?startDateTime={startDateTime}&endDateTime={endDateTime}&allPromo=true";
+            var url = BuildCalendarUrl("/api/v1/calendar/promotions", null);
 
             for (int attempt = 1; attempt <= maxAttempts; attempt++)
             {
@@ -239,8 +238,7 @@ namespace SellerOps.App.Services
         private async Task<string> GetCalendarNomenclaturesRawAsync(string baseUrl, string token, long nmId, CancellationToken ct)
         {
             const int maxAttempts = 6;
-            var (startDateTime, endDateTime) = GetCalendarRange();
-            var url = $"/api/v1/calendar/promotions/nomenclatures?nmId={nmId}&startDateTime={startDateTime}&endDateTime={endDateTime}&allPromo=true";
+            var url = BuildCalendarUrl("/api/v1/calendar/promotions/nomenclatures", nmId);
 
             for (int attempt = 1; attempt <= maxAttempts; attempt++)
             {
@@ -293,7 +291,19 @@ namespace SellerOps.App.Services
         {
             var start = DateTime.UtcNow.AddDays(-30);
             var end = DateTime.UtcNow.AddDays(90);
-            return (start.ToString("yyyy-MM-ddTHH:mm:ssZ"), end.ToString("yyyy-MM-ddTHH:mm:ssZ"));
+            return (start.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"), end.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"));
+        }
+
+        private static string BuildCalendarUrl(string path, long? nmId)
+        {
+            var (startDateTime, endDateTime) = GetCalendarRange();
+            var start = Uri.EscapeDataString(startDateTime);
+            var end = Uri.EscapeDataString(endDateTime);
+
+            if (nmId.HasValue)
+                return $"{path}?nmId={nmId.Value}&startDateTime={start}&endDateTime={end}&allPromo=true";
+
+            return $"{path}?startDateTime={start}&endDateTime={end}&allPromo=true";
         }
 
         private async Task<string> GetPromotionsRawAsync(string baseUrl, string token, IReadOnlyCollection<long> advertIds, CancellationToken ct)
