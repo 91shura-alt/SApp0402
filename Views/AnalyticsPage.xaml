@@ -106,6 +106,30 @@
                           CanUserDeleteRows="False"/>
             </TabItem>
 
+            <TabItem x:Name="ProductsTab" Header="Товары">
+                <DataGrid x:Name="ProductsGrid"
+                          AutoGenerateColumns="True"
+                          IsReadOnly="True"
+                          CanUserAddRows="False"
+                          CanUserDeleteRows="False"/>
+            </TabItem>
+
+            <TabItem x:Name="DailyTab" Header="По дням">
+                <DataGrid x:Name="DailyGrid"
+                          AutoGenerateColumns="True"
+                          IsReadOnly="True"
+                          CanUserAddRows="False"
+                          CanUserDeleteRows="False"/>
+            </TabItem>
+
+            <TabItem x:Name="FinanceTab" Header="Финансы/расходы">
+                <DataGrid x:Name="FinanceGrid"
+                          AutoGenerateColumns="True"
+                          IsReadOnly="True"
+                          CanUserAddRows="False"
+                          CanUserDeleteRows="False"/>
+            </TabItem>
+
             <TabItem x:Name="RealsTab" Header="Реализации (сырые)">
                 <DataGrid x:Name="RealGrid"
                           AutoGenerateColumns="True"
