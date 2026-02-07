@@ -32,6 +32,20 @@ namespace SellerOps.App.Services
 
         private (string token, string baseUrl) GetCreds()
         {
+            var localToken = AppSettings.Instance.EncryptedCommonToken;
+            if (!string.IsNullOrWhiteSpace(localToken))
+            {
+                var localTokenValue = SecureStorage.Unprotect(localToken)?.Trim();
+                if (string.IsNullOrWhiteSpace(localTokenValue))
+                    throw new InvalidOperationException("Локальный токен 'Common' пустой/не расшифровался. Открой WB настройки и сохрани токен заново.");
+
+                var localBaseUrl = AppSettings.Instance.CommonIsSandbox
+                    ? "https://common-api-sandbox.wildberries.ru"
+                    : "https://common-api.wildberries.ru";
+
+                return (localTokenValue!, localBaseUrl);
+            }
+
             // 1) Пытаемся найти именно Common
             var row = _db.ApiTokens.AsNoTracking()
                 .OrderByDescending(x => x.Id)

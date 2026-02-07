@@ -255,6 +255,46 @@ namespace SellerOps.App.Views
                     settings.EncryptedMarketplaceToken = encryptedToken;
                     settings.MarketplaceIsSandbox = sandbox;
                     break;
+                case "PricesAndDiscounts":
+                    settings.EncryptedPricesAndDiscountsToken = encryptedToken;
+                    settings.PricesAndDiscountsIsSandbox = sandbox;
+                    break;
+                case "Promotion":
+                    settings.EncryptedPromotionToken = encryptedToken;
+                    settings.PromotionIsSandbox = sandbox;
+                    break;
+                case "Feedbacks":
+                    settings.EncryptedFeedbacksToken = encryptedToken;
+                    settings.FeedbacksIsSandbox = sandbox;
+                    break;
+                case "BuyerChat":
+                    settings.EncryptedBuyerChatToken = encryptedToken;
+                    settings.BuyerChatIsSandbox = sandbox;
+                    break;
+                case "Supplies":
+                    settings.EncryptedSuppliesToken = encryptedToken;
+                    settings.SuppliesIsSandbox = sandbox;
+                    break;
+                case "Returns":
+                    settings.EncryptedReturnsToken = encryptedToken;
+                    settings.ReturnsIsSandbox = sandbox;
+                    break;
+                case "Documents":
+                    settings.EncryptedDocumentsToken = encryptedToken;
+                    settings.DocumentsIsSandbox = sandbox;
+                    break;
+                case "Finance":
+                    settings.EncryptedFinanceToken = encryptedToken;
+                    settings.FinanceIsSandbox = sandbox;
+                    break;
+                case "Users":
+                    settings.EncryptedUsersToken = encryptedToken;
+                    settings.UsersIsSandbox = sandbox;
+                    break;
+                case "Common":
+                    settings.EncryptedCommonToken = encryptedToken;
+                    settings.CommonIsSandbox = sandbox;
+                    break;
             }
 
             settings.Save();
@@ -305,24 +345,24 @@ namespace SellerOps.App.Views
                 {
                     "Content" => sandbox ? "https://content-api-sandbox.wildberries.ru" : "https://content-api.wildberries.ru",
                     "Statistics" => sandbox ? "https://statistics-api-sandbox.wildberries.ru" : "https://statistics-api.wildberries.ru",
-                    "Analytics" => "https://seller-analytics-api.wildberries.ru",
+                    "Analytics" => sandbox ? "https://seller-analytics-api-sandbox.wildberries.ru" : "https://seller-analytics-api.wildberries.ru",
 
-                    "Marketplace" => "https://marketplace-api.wildberries.ru",
+                    "Marketplace" => sandbox ? "https://marketplace-api-sandbox.wildberries.ru" : "https://marketplace-api.wildberries.ru",
                     "PricesAndDiscounts" => sandbox ? "https://discounts-prices-api-sandbox.wildberries.ru" : "https://discounts-prices-api.wildberries.ru",
 
                     "Promotion" => sandbox ? "https://advert-api-sandbox.wildberries.ru" : "https://advert-api.wildberries.ru",
                     "Feedbacks" => sandbox ? "https://feedbacks-api-sandbox.wildberries.ru" : "https://feedbacks-api.wildberries.ru",
-                    "BuyerChat" => "https://buyer-chat-api.wildberries.ru",
-                    "Supplies" => "https://supplies-api.wildberries.ru",
-                    "Returns" => "https://returns-api.wildberries.ru",
+                    "BuyerChat" => sandbox ? "https://buyer-chat-api-sandbox.wildberries.ru" : "https://buyer-chat-api.wildberries.ru",
+                    "Supplies" => sandbox ? "https://supplies-api-sandbox.wildberries.ru" : "https://supplies-api.wildberries.ru",
+                    "Returns" => sandbox ? "https://returns-api-sandbox.wildberries.ru" : "https://returns-api.wildberries.ru",
 
-                    "Documents" => "https://documents-api.wildberries.ru",
-                    "Finance" => "https://finance-api.wildberries.ru",
+                    "Documents" => sandbox ? "https://documents-api-sandbox.wildberries.ru" : "https://documents-api.wildberries.ru",
+                    "Finance" => sandbox ? "https://finance-api-sandbox.wildberries.ru" : "https://finance-api.wildberries.ru",
 
-                    "Users" => "https://user-management-api.wildberries.ru",
-                    "Common" => "https://common-api.wildberries.ru",
+                    "Users" => sandbox ? "https://user-management-api-sandbox.wildberries.ru" : "https://user-management-api.wildberries.ru",
+                    "Common" => sandbox ? "https://common-api-sandbox.wildberries.ru" : "https://common-api.wildberries.ru",
 
-                    _ => "https://common-api.wildberries.ru",
+                    _ => sandbox ? "https://common-api-sandbox.wildberries.ru" : "https://common-api.wildberries.ru",
                 };
 
                 if (category == "Content")

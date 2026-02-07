@@ -29,6 +29,20 @@ namespace SellerOps.App.Services
 
         private (string token, string baseUrl) GetCreds()
         {
+            var localToken = AppSettings.Instance.EncryptedPricesAndDiscountsToken;
+            if (!string.IsNullOrWhiteSpace(localToken))
+            {
+                var localTokenValue = SecureStorage.Unprotect(localToken)?.Trim();
+                if (string.IsNullOrWhiteSpace(localTokenValue))
+                    throw new InvalidOperationException("Локальный токен 'PricesAndDiscounts' пустой/не расшифровался. Открой WB настройки и сохрани токен заново.");
+
+                var localBaseUrl = AppSettings.Instance.PricesAndDiscountsIsSandbox
+                    ? "https://discounts-prices-api-sandbox.wildberries.ru"
+                    : "https://discounts-prices-api.wildberries.ru";
+
+                return (localTokenValue!, localBaseUrl);
+            }
+
             var row = _db.ApiTokens.AsNoTracking()
                 .OrderByDescending(x => x.Id)
                 .FirstOrDefault(x => x.Category == "PricesAndDiscounts");
