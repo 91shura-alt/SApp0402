@@ -63,9 +63,7 @@ namespace SellerOps.App.Services
 
         private string GetCalendarBaseUrl()
         {
-            return AppSettings.Instance.PromotionIsSandbox
-                ? "https://promotion-api-sandbox.wildberries.ru"
-                : "https://promotion-api.wildberries.ru";
+            return "https://promotion-api.wildberries.ru";
         }
 
         public async Task<int> RefreshPromotionsForNmIdAsync(long nmId, CancellationToken ct = default)
