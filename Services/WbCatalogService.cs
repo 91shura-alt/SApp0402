@@ -30,15 +30,15 @@ namespace SellerOps.App.Services
             var localToken = AppSettings.Instance.EncryptedContentToken;
             if (!string.IsNullOrWhiteSpace(localToken))
             {
-                var token = SecureStorage.Unprotect(localToken)?.Trim();
-                if (string.IsNullOrWhiteSpace(token))
+                var localTokenValue = SecureStorage.Unprotect(localToken)?.Trim();
+                if (string.IsNullOrWhiteSpace(localTokenValue))
                     throw new InvalidOperationException("Локальный токен 'Content' пустой/не расшифровался. Открой WB настройки и сохрани токен заново.");
 
-                var baseUrl = AppSettings.Instance.ContentIsSandbox
+                var localBaseUrl = AppSettings.Instance.ContentIsSandbox
                     ? "https://content-api-sandbox.wildberries.ru"
                     : "https://content-api.wildberries.ru";
 
-                return (token!, baseUrl);
+                return (localTokenValue!, localBaseUrl);
             }
 
             var row = _db.ApiTokens.AsNoTracking()

@@ -33,15 +33,15 @@ namespace SellerOps.App.Services
         {
             if (category == "Marketplace" && !string.IsNullOrWhiteSpace(AppSettings.Instance.EncryptedMarketplaceToken))
             {
-                var token = SecureStorage.Unprotect(AppSettings.Instance.EncryptedMarketplaceToken)?.Trim();
-                if (string.IsNullOrWhiteSpace(token))
+                var localToken = SecureStorage.Unprotect(AppSettings.Instance.EncryptedMarketplaceToken)?.Trim();
+                if (string.IsNullOrWhiteSpace(localToken))
                     throw new InvalidOperationException("Локальный токен 'Marketplace' пустой/не расшифровался. Открой WB настройки и сохрани токен заново.");
 
-                var baseUrl = AppSettings.Instance.MarketplaceIsSandbox
+                var localBaseUrl = AppSettings.Instance.MarketplaceIsSandbox
                     ? "https://marketplace-api-sandbox.wildberries.ru"
                     : "https://marketplace-api.wildberries.ru";
 
-                return (token!, baseUrl);
+                return (localToken!, localBaseUrl);
             }
 
             var row = _db.ApiTokens.AsNoTracking()

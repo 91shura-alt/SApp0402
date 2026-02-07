@@ -31,15 +31,15 @@ namespace SellerOps.App.Services
         {
             if (kind == "Statistics" && !string.IsNullOrWhiteSpace(AppSettings.Instance.EncryptedStatisticsToken))
             {
-                var token = (SecureStorage.Unprotect(AppSettings.Instance.EncryptedStatisticsToken) ?? "").Trim();
-                if (string.IsNullOrWhiteSpace(token))
+                var localToken = (SecureStorage.Unprotect(AppSettings.Instance.EncryptedStatisticsToken) ?? "").Trim();
+                if (string.IsNullOrWhiteSpace(localToken))
                     throw new InvalidOperationException("Локальный токен 'Statistics' пустой/не расшифровался. Открой WB настройки и сохрани токен заново.");
 
-                var baseUrl = AppSettings.Instance.StatisticsIsSandbox
+                var localBaseUrl = AppSettings.Instance.StatisticsIsSandbox
                     ? "https://statistics-api-sandbox.wildberries.ru"
                     : "https://statistics-api.wildberries.ru";
 
-                return (token, baseUrl);
+                return (localToken, localBaseUrl);
             }
 
             var row = _db.ApiTokens.AsNoTracking()
