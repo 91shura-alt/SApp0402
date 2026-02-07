@@ -61,7 +61,7 @@ namespace SellerOps.App.Services
             return (token!, baseUrl);
         }
 
-        private (string token, string baseUrl) GetCalendarCreds()
+        private (string token, bool isSandbox) GetPricesAndDiscountsCreds()
         {
             var localToken = AppSettings.Instance.EncryptedPricesAndDiscountsToken;
             if (!string.IsNullOrWhiteSpace(localToken))
@@ -70,7 +70,7 @@ namespace SellerOps.App.Services
                 if (string.IsNullOrWhiteSpace(localTokenValue))
                     throw new InvalidOperationException("Локальный токен 'PricesAndDiscounts' пустой/не расшифровался. Открой WB настройки и сохрани токен заново.");
 
-                return (localTokenValue!, "https://dp-calendar-api.wildberries.ru");
+                return (localTokenValue!, AppSettings.Instance.PricesAndDiscountsIsSandbox);
             }
 
             var row = _db.ApiTokens.AsNoTracking()
@@ -87,39 +87,21 @@ namespace SellerOps.App.Services
             if (string.IsNullOrWhiteSpace(token))
                 throw new InvalidOperationException("Токен 'PricesAndDiscounts' пустой/не расшифровался.");
 
-            return (token!, "https://dp-calendar-api.wildberries.ru");
+            return (token!, row.IsSandbox);
+        }
+
+        private static string GetCalendarBaseUrl(bool isSandbox)
+        {
+            return isSandbox
+                ? "https://discounts-prices-api-sandbox.wildberries.ru"
+                : "https://dp-calendar-api.wildberries.ru";
         }
 
         public async Task<int> RefreshPromotionsForNmIdAsync(long nmId, CancellationToken ct = default)
         {
-            var (token, baseUrl) = GetCreds();
-            var (calendarToken, calendarBaseUrl) = GetCalendarCreds();
-            List<WbPromotionItem> parsed;
-            Exception? calendarError = null;
-
-            try
-            {
-                var payloadCalendar = await GetCalendarNomenclaturesRawAsync(calendarBaseUrl, calendarToken, nmId, ct);
-                parsed = ParseCalendarNomenclatures(payloadCalendar, nmId);
-            }
-            catch (Exception ex)
-            {
-                calendarError = ex;
-                parsed = new List<WbPromotionItem>();
-            }
-
-            if (parsed.Count == 0)
-            {
-                var advertIds = await GetPromotionAdvertIdsAsync(baseUrl, token, ct);
-                if (advertIds.Count == 0)
-                    throw new InvalidOperationException("WB Promotion: не удалось получить список кампаний (advertIds).");
-
-                var payload = await GetPromotionsRawAsync(baseUrl, token, advertIds, ct);
-                parsed = ParsePromotions(payload, nmId);
-
-                if (parsed.Count == 0 && calendarError != null)
-                    throw new InvalidOperationException($"WB Promotion: календарь акций вернул ошибку: {calendarError.Message}");
-            }
+            var (token, isSandbox) = GetPricesAndDiscountsCreds();
+            var baseUrl = GetCalendarBaseUrl(isSandbox);
+            var parsed = await LoadPromotionsFromCalendarAsync(baseUrl, token, nmId, ct);
 
             var importedAt = DateTime.UtcNow;
             var existing = await _db.WbPromotionItems.Where(x => x.NmId == nmId).ToListAsync(ct);
@@ -139,9 +121,9 @@ namespace SellerOps.App.Services
 
         public async Task<int> RefreshCalendarPromotionsForNmIdAsync(long nmId, CancellationToken ct = default)
         {
-            var (token, baseUrl) = GetCalendarCreds();
-            var payload = await GetCalendarPromotionsRawAsync(baseUrl, token, ct);
-            var parsed = ParseCalendarPromotions(payload, nmId);
+            var (token, isSandbox) = GetPricesAndDiscountsCreds();
+            var baseUrl = GetCalendarBaseUrl(isSandbox);
+            var parsed = await LoadCalendarEntriesAsync(baseUrl, token, nmId, ct);
 
             var importedAt = DateTime.UtcNow;
             var existing = await _db.WbPromotionCalendarItems.Where(x => x.NmId == nmId).ToListAsync(ct);
@@ -197,7 +179,10 @@ namespace SellerOps.App.Services
                 var payload = await resp.Content.ReadAsStringAsync(ct);
 
                 if (resp.IsSuccessStatusCode)
+                {
+                    await SaveRawAsync("promo_calendar_promotions", $"promo_calendar_promotions_{DateTime.UtcNow:yyyyMMddHHmmss}.json", payload, ct);
                     return payload;
+                }
 
                 if ((int)resp.StatusCode == 401)
                 {
@@ -206,7 +191,10 @@ namespace SellerOps.App.Services
                     var payloadBearer = await respBearer.Content.ReadAsStringAsync(ct);
 
                     if (respBearer.IsSuccessStatusCode)
+                    {
+                        await SaveRawAsync("promo_calendar_promotions", $"promo_calendar_promotions_{DateTime.UtcNow:yyyyMMddHHmmss}.json", payloadBearer, ct);
                         return payloadBearer;
+                    }
 
                     if (respBearer.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
                     {
@@ -217,7 +205,7 @@ namespace SellerOps.App.Services
                         continue;
                     }
 
-                    throw new InvalidOperationException($"WB Promotion calendar вернул {(int)respBearer.StatusCode}. {payloadBearer}");
+                    throw new InvalidOperationException(BuildHttpErrorMessage("WB Promotion calendar", url, respBearer, payloadBearer));
                 }
 
                 if (resp.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
@@ -229,16 +217,16 @@ namespace SellerOps.App.Services
                     continue;
                 }
 
-                throw new InvalidOperationException($"WB Promotion calendar вернул {(int)resp.StatusCode}. {payload}");
+                throw new InvalidOperationException(BuildHttpErrorMessage("WB Promotion calendar", url, resp, payload));
             }
 
             throw new InvalidOperationException("WB Promotion calendar: не удалось выполнить запрос (retry exhausted).");
         }
 
-        private async Task<string> GetCalendarNomenclaturesRawAsync(string baseUrl, string token, long nmId, CancellationToken ct)
+        private async Task<string> GetCalendarNomenclaturesRawAsync(string baseUrl, string token, long promotionId, bool inAction, CancellationToken ct)
         {
             const int maxAttempts = 6;
-            var url = BuildCalendarUrl("/api/v1/calendar/promotions/nomenclatures", nmId);
+            var url = BuildCalendarNomenclaturesUrl(promotionId, inAction);
 
             for (int attempt = 1; attempt <= maxAttempts; attempt++)
             {
@@ -249,7 +237,10 @@ namespace SellerOps.App.Services
                 var payload = await resp.Content.ReadAsStringAsync(ct);
 
                 if (resp.IsSuccessStatusCode)
+                {
+                    await SaveRawAsync("promo_calendar_nomenclatures", $"promo_calendar_nomenclatures_{promotionId}_{inAction}_{DateTime.UtcNow:yyyyMMddHHmmss}.json", payload, ct);
                     return payload;
+                }
 
                 if ((int)resp.StatusCode == 401)
                 {
@@ -258,7 +249,10 @@ namespace SellerOps.App.Services
                     var payloadBearer = await respBearer.Content.ReadAsStringAsync(ct);
 
                     if (respBearer.IsSuccessStatusCode)
+                    {
+                        await SaveRawAsync("promo_calendar_nomenclatures", $"promo_calendar_nomenclatures_{promotionId}_{inAction}_{DateTime.UtcNow:yyyyMMddHHmmss}.json", payloadBearer, ct);
                         return payloadBearer;
+                    }
 
                     if (respBearer.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
                     {
@@ -269,7 +263,7 @@ namespace SellerOps.App.Services
                         continue;
                     }
 
-                    throw new InvalidOperationException($"WB Promotion calendar nomenclatures вернул {(int)respBearer.StatusCode}. {payloadBearer}");
+                    throw new InvalidOperationException(BuildHttpErrorMessage("WB Promotion calendar nomenclatures", url, respBearer, payloadBearer));
                 }
 
                 if (resp.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
@@ -281,7 +275,7 @@ namespace SellerOps.App.Services
                     continue;
                 }
 
-                throw new InvalidOperationException($"WB Promotion calendar nomenclatures вернул {(int)resp.StatusCode}. {payload}");
+                throw new InvalidOperationException(BuildHttpErrorMessage("WB Promotion calendar nomenclatures", url, resp, payload));
             }
 
             throw new InvalidOperationException("WB Promotion calendar nomenclatures: не удалось выполнить запрос (retry exhausted).");
@@ -289,8 +283,8 @@ namespace SellerOps.App.Services
 
         private static (string start, string end) GetCalendarRange()
         {
-            var start = DateTime.UtcNow.AddDays(-30);
-            var end = DateTime.UtcNow.AddDays(90);
+            var start = DateTime.UtcNow.AddDays(-1);
+            var end = DateTime.UtcNow.AddDays(60);
             return (start.ToString("yyyy-MM-ddTHH:mm:ssZ"), end.ToString("yyyy-MM-ddTHH:mm:ssZ"));
         }
 
@@ -300,10 +294,113 @@ namespace SellerOps.App.Services
             var start = Uri.EscapeDataString(startDateTime);
             var end = Uri.EscapeDataString(endDateTime);
 
+            var baseQuery = $"startDateTime={start}&endDateTime={end}&allPromo=true&limit=1000&offset=0";
             if (nmId.HasValue)
-                return $"{path}?nmId={nmId.Value}&startDateTime={start}&endDateTime={end}&allPromo=true";
+                return $"{path}?nmId={nmId.Value}&{baseQuery}";
 
-            return $"{path}?startDateTime={start}&endDateTime={end}&allPromo=true";
+            return $"{path}?{baseQuery}";
+        }
+
+        private static string BuildCalendarNomenclaturesUrl(long promotionId, bool inAction)
+        {
+            return $"/api/v1/calendar/promotions/nomenclatures?promotionID={promotionId}&inAction={inAction.ToString().ToLowerInvariant()}&limit=1000&offset=0";
+        }
+
+        private async Task<List<WbPromotionCalendarItem>> LoadCalendarEntriesAsync(string baseUrl, string token, long nmId, CancellationToken ct)
+        {
+            var payload = await GetCalendarPromotionsRawAsync(baseUrl, token, ct);
+            var promotions = ParseCalendarPromotions(payload);
+            var result = new List<WbPromotionCalendarItem>();
+
+            foreach (var promo in promotions)
+            {
+                if (string.Equals(promo.Type, "regular", StringComparison.OrdinalIgnoreCase))
+                {
+                    var found = await TryLoadNomenclatureAsync(baseUrl, token, promo.Id, nmId, ct);
+                    if (found == null)
+                        continue;
+
+                    result.Add(new WbPromotionCalendarItem
+                    {
+                        PromotionId = promo.Id,
+                        Name = promo.Name,
+                        Status = promo.Type,
+                        Participation = found.InAction ? "Да" : "Нет",
+                        DateFrom = promo.StartDateTime ?? "",
+                        DateTo = promo.EndDateTime ?? "",
+                        Details = $"price={found.Price}; planPrice={found.PlanPrice}; discount={found.Discount}; planDiscount={found.PlanDiscount}"
+                    });
+                    continue;
+                }
+
+                if (string.Equals(promo.Type, "auto", StringComparison.OrdinalIgnoreCase))
+                {
+                    result.Add(new WbPromotionCalendarItem
+                    {
+                        PromotionId = promo.Id,
+                        Name = promo.Name,
+                        Status = promo.Type,
+                        Participation = "н/д (auto)",
+                        DateFrom = promo.StartDateTime ?? "",
+                        DateTo = promo.EndDateTime ?? "",
+                        Details = "auto promotion; WB API не даёт список товаров"
+                    });
+                }
+            }
+
+            return result;
+        }
+
+        private async Task<List<WbPromotionItem>> LoadPromotionsFromCalendarAsync(string baseUrl, string token, long nmId, CancellationToken ct)
+        {
+            var payload = await GetCalendarPromotionsRawAsync(baseUrl, token, ct);
+            var promotions = ParseCalendarPromotions(payload);
+            var result = new List<WbPromotionItem>();
+
+            foreach (var promo in promotions)
+            {
+                if (!string.Equals(promo.Type, "regular", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var found = await TryLoadNomenclatureAsync(baseUrl, token, promo.Id, nmId, ct);
+                if (found == null)
+                    continue;
+
+                result.Add(new WbPromotionItem
+                {
+                    PromotionId = promo.Id,
+                    Name = promo.Name,
+                    RequiredDiscount = found.PlanDiscount,
+                    Status = found.InAction ? "В акции" : "Можно войти",
+                    Details = $"price={found.Price}; planPrice={found.PlanPrice}; currentDiscount={found.Discount}; planDiscount={found.PlanDiscount}"
+                });
+            }
+
+            return result;
+        }
+
+        private async Task<NomenclatureInfo?> TryLoadNomenclatureAsync(string baseUrl, string token, long promotionId, long nmId, CancellationToken ct)
+        {
+            var payload = await GetCalendarNomenclaturesRawAsync(baseUrl, token, promotionId, true, ct);
+            var found = ParseNomenclatures(payload, nmId);
+            if (found != null)
+            {
+                found.InAction = true;
+                return found;
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(650), ct);
+
+            payload = await GetCalendarNomenclaturesRawAsync(baseUrl, token, promotionId, false, ct);
+            found = ParseNomenclatures(payload, nmId);
+            if (found != null)
+            {
+                found.InAction = false;
+                return found;
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(650), ct);
+            return null;
         }
 
         private async Task<string> GetPromotionsRawAsync(string baseUrl, string token, IReadOnlyCollection<long> advertIds, CancellationToken ct)
@@ -452,14 +549,14 @@ namespace SellerOps.App.Services
             return result;
         }
 
-        private static List<WbPromotionCalendarItem> ParseCalendarPromotions(string payload, long nmId)
+        private static List<CalendarPromotion> ParseCalendarPromotions(string payload)
         {
-            var result = new List<WbPromotionCalendarItem>();
+            var result = new List<CalendarPromotion>();
 
             try
             {
                 using var doc = JsonDocument.Parse(payload);
-                ExtractCalendarPromotions(doc.RootElement, nmId, result);
+                ExtractCalendarPromotions(doc.RootElement, result);
             }
             catch
             {
@@ -469,22 +566,6 @@ namespace SellerOps.App.Services
             return result;
         }
 
-        private static List<WbPromotionItem> ParseCalendarNomenclatures(string payload, long nmId)
-        {
-            var result = new List<WbPromotionItem>();
-
-            try
-            {
-                using var doc = JsonDocument.Parse(payload);
-                ExtractCalendarNomenclatures(doc.RootElement, nmId, result);
-            }
-            catch
-            {
-                // игнор — вернём пустой список
-            }
-
-            return result;
-        }
 
         private static void ExtractPromotions(JsonElement element, long nmId, List<WbPromotionItem> result)
         {
@@ -529,94 +610,43 @@ namespace SellerOps.App.Services
             }
         }
 
-        private static void ExtractCalendarPromotions(JsonElement element, long nmId, List<WbPromotionCalendarItem> result)
+        private static void ExtractCalendarPromotions(JsonElement element, List<CalendarPromotion> result)
         {
             switch (element.ValueKind)
             {
                 case JsonValueKind.Object:
-                    if (ContainsNmCalendar(element, nmId))
+                    if (element.TryGetProperty("data", out var data))
+                        ExtractCalendarPromotions(data, result);
+                    if (element.TryGetProperty("promotions", out var promotions))
+                        ExtractCalendarPromotions(promotions, result);
+                    if (element.TryGetProperty("promotion", out var promotion))
+                        ExtractCalendarPromotions(promotion, result);
+
+                    if (TryGetInt64FromAny(element, "id", "promotionId", "actionId") is long id)
                     {
-                        var name = TryGetStringFromAny(element, "action_name", "name", "title");
-                        var status = TryGetStringFromAny(element, "status", "state");
-                        var participation = TryGetStringFromAny(element, "participation", "participate", "isParticipating", "participationStatus");
-                        var dateFrom = TryGetStringFromAny(element, "date_from", "dateFrom", "from", "start", "startDate");
-                        var dateTo = TryGetStringFromAny(element, "date_to", "dateTo", "to", "end", "endDate");
-                        var details = TryGetStringFromAny(element, "message", "comment", "details", "description", "bottomText1", "bottomText2");
-                        var promoId = TryGetInt64FromAny(element, "id", "promotionId", "advertId", "actionId");
+                        var name = TryGetStringFromAny(element, "name", "action_name", "title") ?? "Акция";
+                        var type = TryGetStringFromAny(element, "type") ?? "";
+                        var start = TryGetStringFromAny(element, "startDateTime", "date_from", "start", "from");
+                        var end = TryGetStringFromAny(element, "endDateTime", "date_to", "end", "to");
 
-                        if (string.IsNullOrWhiteSpace(name)
-                            && string.IsNullOrWhiteSpace(status)
-                            && string.IsNullOrWhiteSpace(participation)
-                            && string.IsNullOrWhiteSpace(dateFrom)
-                            && string.IsNullOrWhiteSpace(dateTo)
-                            && string.IsNullOrWhiteSpace(details)
-                            && !promoId.HasValue)
+                        result.Add(new CalendarPromotion
                         {
-                            break;
-                        }
-
-                        result.Add(new WbPromotionCalendarItem
-                        {
-                            PromotionId = promoId,
-                            Name = string.IsNullOrWhiteSpace(name) ? "Акция" : name,
-                            Status = status ?? "",
-                            Participation = participation ?? "",
-                            DateFrom = dateFrom ?? "",
-                            DateTo = dateTo ?? "",
-                            Details = details ?? "",
-                            RawJson = element.GetRawText()
+                            Id = id,
+                            Name = name,
+                            Type = type,
+                            StartDateTime = start,
+                            EndDateTime = end
                         });
                     }
-
-                    foreach (var prop in element.EnumerateObject())
-                        ExtractCalendarPromotions(prop.Value, nmId, result);
+                    else
+                    {
+                        foreach (var prop in element.EnumerateObject())
+                            ExtractCalendarPromotions(prop.Value, result);
+                    }
                     break;
                 case JsonValueKind.Array:
                     foreach (var item in element.EnumerateArray())
-                        ExtractCalendarPromotions(item, nmId, result);
-                    break;
-            }
-        }
-
-        private static void ExtractCalendarNomenclatures(JsonElement element, long nmId, List<WbPromotionItem> result)
-        {
-            switch (element.ValueKind)
-            {
-                case JsonValueKind.Object:
-                    if (ContainsNmCalendar(element, nmId))
-                    {
-                        var name = TryGetStringFromAny(element, "action_name", "name", "title");
-                        var required = TryGetStringFromAny(element, "requiredDiscount", "minDiscount", "discount", "discountPercent", "discountPercentRequired");
-                        var status = TryGetStringFromAny(element, "status", "state");
-                        var details = TryGetStringFromAny(element, "message", "comment", "details", "description", "bottomText1", "bottomText2");
-                        var promoId = TryGetInt64FromAny(element, "id", "promotionId", "advertId", "actionId");
-
-                        if (string.IsNullOrWhiteSpace(name)
-                            && string.IsNullOrWhiteSpace(required)
-                            && string.IsNullOrWhiteSpace(status)
-                            && string.IsNullOrWhiteSpace(details)
-                            && !promoId.HasValue)
-                        {
-                            break;
-                        }
-
-                        result.Add(new WbPromotionItem
-                        {
-                            PromotionId = promoId,
-                            Name = string.IsNullOrWhiteSpace(name) ? "Акция" : name,
-                            RequiredDiscount = required ?? "",
-                            Status = status ?? "",
-                            Details = details ?? "",
-                            RawJson = element.GetRawText()
-                        });
-                    }
-
-                    foreach (var prop in element.EnumerateObject())
-                        ExtractCalendarNomenclatures(prop.Value, nmId, result);
-                    break;
-                case JsonValueKind.Array:
-                    foreach (var item in element.EnumerateArray())
-                        ExtractCalendarNomenclatures(item, nmId, result);
+                        ExtractCalendarPromotions(item, result);
                     break;
             }
         }
@@ -627,17 +657,6 @@ namespace SellerOps.App.Services
                 return true;
 
             if (ContainsNmInArray(element, nmId, "nms", "nmIds", "nm_ids", "nmID"))
-                return true;
-
-            return false;
-        }
-
-        private static bool ContainsNmCalendar(JsonElement element, long nmId)
-        {
-            if (TryGetInt64FromAny(element, "nmId", "nm", "nmID") == nmId)
-                return true;
-
-            if (ContainsNmInArray(element, nmId, "nms", "nmIds", "nm_ids", "nomenclatures", "nomenclatureIds"))
                 return true;
 
             return false;
@@ -663,6 +682,91 @@ namespace SellerOps.App.Services
             }
 
             return false;
+        }
+
+        private static NomenclatureInfo? ParseNomenclatures(string payload, long nmId)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(payload);
+                if (doc.RootElement.ValueKind == JsonValueKind.Object
+                    && doc.RootElement.TryGetProperty("data", out var data)
+                    && data.TryGetProperty("nomenclatures", out var nms)
+                    && nms.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var item in nms.EnumerateArray())
+                    {
+                        if (!item.TryGetProperty("id", out var idEl))
+                            continue;
+
+                        if (idEl.ValueKind == JsonValueKind.Number && idEl.TryGetInt64(out var id) && id == nmId)
+                            return BuildNomenclatureInfo(item);
+                        if (idEl.ValueKind == JsonValueKind.String && long.TryParse(idEl.GetString(), out var sid) && sid == nmId)
+                            return BuildNomenclatureInfo(item);
+                    }
+                }
+            }
+            catch
+            {
+                return null;
+            }
+
+            return null;
+        }
+
+        private static NomenclatureInfo BuildNomenclatureInfo(JsonElement item)
+        {
+            return new NomenclatureInfo
+            {
+                Price = TryGetStringFromAny(item, "price") ?? "",
+                PlanPrice = TryGetStringFromAny(item, "planPrice") ?? "",
+                Discount = TryGetStringFromAny(item, "discount") ?? "",
+                PlanDiscount = TryGetStringFromAny(item, "planDiscount") ?? ""
+            };
+        }
+
+        private sealed class CalendarPromotion
+        {
+            public long Id { get; set; }
+            public string Name { get; set; } = "";
+            public string Type { get; set; } = "";
+            public string? StartDateTime { get; set; }
+            public string? EndDateTime { get; set; }
+        }
+
+        private sealed class NomenclatureInfo
+        {
+            public bool InAction { get; set; }
+            public string Price { get; set; } = "";
+            public string PlanPrice { get; set; } = "";
+            public string Discount { get; set; } = "";
+            public string PlanDiscount { get; set; } = "";
+        }
+
+        private async Task SaveRawAsync(string kind, string fileName, string json, CancellationToken ct)
+        {
+            _db.WbRawFiles.Add(new WbRawFile
+            {
+                Kind = kind,
+                FileName = fileName,
+                CreatedAtUtc = DateTime.UtcNow,
+                Json = json
+            });
+
+            await _db.SaveChangesAsync(ct);
+        }
+
+        private static string BuildHttpErrorMessage(string prefix, string url, HttpResponseMessage resp, string payload)
+        {
+            return $"{prefix} вернул {(int)resp.StatusCode} на {url}. {Shorten(payload)}";
+        }
+
+        private static string Shorten(string value, int max = 800)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return "";
+
+            return value.Length <= max ? value : value.Substring(0, max) + "...";
         }
 
         private static string? TryGetStringFromAny(JsonElement element, params string[] names)
