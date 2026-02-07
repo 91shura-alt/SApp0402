@@ -61,21 +61,45 @@ namespace SellerOps.App.Services
             return (token!, baseUrl);
         }
 
-        private string GetCalendarBaseUrl()
+        private (string token, string baseUrl) GetCalendarCreds()
         {
-            return "https://promotion-api.wildberries.ru";
+            var localToken = AppSettings.Instance.EncryptedPricesAndDiscountsToken;
+            if (!string.IsNullOrWhiteSpace(localToken))
+            {
+                var localTokenValue = SecureStorage.Unprotect(localToken)?.Trim();
+                if (string.IsNullOrWhiteSpace(localTokenValue))
+                    throw new InvalidOperationException("Локальный токен 'PricesAndDiscounts' пустой/не расшифровался. Открой WB настройки и сохрани токен заново.");
+
+                return (localTokenValue!, "https://dp-calendar-api.wildberries.ru");
+            }
+
+            var row = _db.ApiTokens.AsNoTracking()
+                .OrderByDescending(x => x.Id)
+                .FirstOrDefault(x => x.Category == "PricesAndDiscounts");
+
+            if (row == null)
+                throw new InvalidOperationException("Не найден токен категории 'PricesAndDiscounts'. Открой WB настройки и добавь токен.");
+
+            if (!SecureStorage.TryUnprotect(row.EncryptedToken, out var token))
+                throw new InvalidOperationException("Токен 'PricesAndDiscounts' был сохранён на другом ПК/пользователе. Пересохраните токен в настройках WB или включите режим хранения без шифрования.");
+
+            token = token?.Trim();
+            if (string.IsNullOrWhiteSpace(token))
+                throw new InvalidOperationException("Токен 'PricesAndDiscounts' пустой/не расшифровался.");
+
+            return (token!, "https://dp-calendar-api.wildberries.ru");
         }
 
         public async Task<int> RefreshPromotionsForNmIdAsync(long nmId, CancellationToken ct = default)
         {
             var (token, baseUrl) = GetCreds();
-            var calendarBaseUrl = GetCalendarBaseUrl();
+            var (calendarToken, calendarBaseUrl) = GetCalendarCreds();
             List<WbPromotionItem> parsed;
             Exception? calendarError = null;
 
             try
             {
-                var payloadCalendar = await GetCalendarNomenclaturesRawAsync(calendarBaseUrl, token, nmId, ct);
+                var payloadCalendar = await GetCalendarNomenclaturesRawAsync(calendarBaseUrl, calendarToken, nmId, ct);
                 parsed = ParseCalendarNomenclatures(payloadCalendar, nmId);
             }
             catch (Exception ex)
@@ -115,8 +139,7 @@ namespace SellerOps.App.Services
 
         public async Task<int> RefreshCalendarPromotionsForNmIdAsync(long nmId, CancellationToken ct = default)
         {
-            var (token, _) = GetCreds();
-            var baseUrl = GetCalendarBaseUrl();
+            var (token, baseUrl) = GetCalendarCreds();
             var payload = await GetCalendarPromotionsRawAsync(baseUrl, token, ct);
             var parsed = ParseCalendarPromotions(payload, nmId);
 
@@ -163,13 +186,15 @@ namespace SellerOps.App.Services
         private async Task<string> GetCalendarPromotionsRawAsync(string baseUrl, string token, CancellationToken ct)
         {
             const int maxAttempts = 6;
+            var (startDateTime, endDateTime) = GetCalendarRange();
+            var url = $"/api/v1/calendar/promotions?startDateTime={startDateTime}&endDateTime={endDateTime}&allPromo=true";
 
             for (int attempt = 1; attempt <= maxAttempts; attempt++)
             {
                 ct.ThrowIfCancellationRequested();
 
                 using var http = _http.Create(baseUrl, token, bearerHeader: false);
-                using var resp = await http.GetAsync("/api/v1/calendar/promotions", ct);
+                using var resp = await http.GetAsync(url, ct);
                 var payload = await resp.Content.ReadAsStringAsync(ct);
 
                 if (resp.IsSuccessStatusCode)
@@ -178,7 +203,7 @@ namespace SellerOps.App.Services
                 if ((int)resp.StatusCode == 401)
                 {
                     using var httpBearer = _http.Create(baseUrl, token, bearerHeader: true);
-                    using var respBearer = await httpBearer.GetAsync("/api/v1/calendar/promotions", ct);
+                    using var respBearer = await httpBearer.GetAsync(url, ct);
                     var payloadBearer = await respBearer.Content.ReadAsStringAsync(ct);
 
                     if (respBearer.IsSuccessStatusCode)
@@ -214,7 +239,8 @@ namespace SellerOps.App.Services
         private async Task<string> GetCalendarNomenclaturesRawAsync(string baseUrl, string token, long nmId, CancellationToken ct)
         {
             const int maxAttempts = 6;
-            var url = $"/api/v1/calendar/promotions/nomenclatures?nmId={nmId}";
+            var (startDateTime, endDateTime) = GetCalendarRange();
+            var url = $"/api/v1/calendar/promotions/nomenclatures?nmId={nmId}&startDateTime={startDateTime}&endDateTime={endDateTime}&allPromo=true";
 
             for (int attempt = 1; attempt <= maxAttempts; attempt++)
             {
@@ -261,6 +287,13 @@ namespace SellerOps.App.Services
             }
 
             throw new InvalidOperationException("WB Promotion calendar nomenclatures: не удалось выполнить запрос (retry exhausted).");
+        }
+
+        private static (string start, string end) GetCalendarRange()
+        {
+            var start = DateTime.UtcNow.AddDays(-30);
+            var end = DateTime.UtcNow.AddDays(90);
+            return (start.ToString("yyyy-MM-ddTHH:mm:ssZ"), end.ToString("yyyy-MM-ddTHH:mm:ssZ"));
         }
 
         private async Task<string> GetPromotionsRawAsync(string baseUrl, string token, IReadOnlyCollection<long> advertIds, CancellationToken ct)
