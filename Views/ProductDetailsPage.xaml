@@ -176,6 +176,23 @@
                             </DataGrid.Columns>
                         </DataGrid>
                     </GroupBox>
+
+                    <GroupBox Header="Календарь акций WB" Margin="0,12,0,0">
+                        <DataGrid x:Name="CalendarPromotionsGrid"
+                                  AutoGenerateColumns="False"
+                                  CanUserAddRows="False"
+                                  CanUserDeleteRows="False"
+                                  IsReadOnly="True">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Акция" Binding="{Binding Name}" Width="180"/>
+                                <DataGridTextColumn Header="Дата с" Binding="{Binding DateFrom}" Width="140"/>
+                                <DataGridTextColumn Header="Дата по" Binding="{Binding DateTo}" Width="140"/>
+                                <DataGridTextColumn Header="Статус" Binding="{Binding Status}" Width="120"/>
+                                <DataGridTextColumn Header="Участие" Binding="{Binding Participation}" Width="120"/>
+                                <DataGridTextColumn Header="Комментарий" Binding="{Binding Details}" Width="*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </GroupBox>
                 </StackPanel>
             </Grid>
 

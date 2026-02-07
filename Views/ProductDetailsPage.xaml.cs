@@ -48,6 +48,16 @@ namespace SellerOps.App.Views
             public string Details { get; set; } = "";
         }
 
+        private sealed class CalendarRow
+        {
+            public string Name { get; set; } = "";
+            public string DateFrom { get; set; } = "";
+            public string DateTo { get; set; } = "";
+            public string Status { get; set; } = "";
+            public string Participation { get; set; } = "";
+            public string Details { get; set; } = "";
+        }
+
         private async Task LoadAsync()
         {
             try
@@ -166,6 +176,7 @@ namespace SellerOps.App.Views
 
                 await LoadPricesAsync();
                 await LoadPromotionsAsync();
+                await LoadCalendarPromotionsAsync();
             }
             catch (Exception ex)
             {
@@ -285,6 +296,70 @@ namespace SellerOps.App.Views
             }
 
             PromotionsGrid.ItemsSource = rows;
+        }
+
+        private async Task LoadCalendarPromotionsAsync()
+        {
+            var rows = new List<CalendarRow>();
+            var db = AppDbContext.Instance;
+
+            var latestPromotionTs = await db.WbPromotionCalendarItems.AsNoTracking()
+                .Where(x => x.NmId == _nmId)
+                .MaxAsync(x => (DateTime?)x.ImportedAtUtc);
+
+            if (!latestPromotionTs.HasValue || DateTime.UtcNow - latestPromotionTs.Value > TimeSpan.FromHours(6))
+            {
+                try
+                {
+                    var svc = new WbPromotionService(db);
+                    await svc.RefreshCalendarPromotionsForNmIdAsync(_nmId);
+                }
+                catch (Exception ex)
+                {
+                    rows.Add(new CalendarRow
+                    {
+                        Name = "Ошибка загрузки",
+                        DateFrom = "н/д",
+                        DateTo = "н/д",
+                        Status = "",
+                        Participation = "",
+                        Details = ex.Message
+                    });
+                }
+            }
+
+            if (rows.Count == 0)
+            {
+                var promos = await db.WbPromotionCalendarItems.AsNoTracking()
+                    .Where(x => x.NmId == _nmId)
+                    .OrderByDescending(x => x.ImportedAtUtc)
+                    .ToListAsync();
+
+                rows.AddRange(promos.Select(x => new CalendarRow
+                {
+                    Name = x.Name,
+                    DateFrom = x.DateFrom,
+                    DateTo = x.DateTo,
+                    Status = x.Status,
+                    Participation = x.Participation,
+                    Details = x.Details
+                }));
+            }
+
+            if (rows.Count == 0)
+            {
+                rows.Add(new CalendarRow
+                {
+                    Name = "Нет данных",
+                    DateFrom = "н/д",
+                    DateTo = "н/д",
+                    Status = "",
+                    Participation = "",
+                    Details = "Календарь акций не вернул данных."
+                });
+            }
+
+            CalendarPromotionsGrid.ItemsSource = rows;
         }
 
         private static string? TryExtractDescriptionFromRawJson(string? rawJson)

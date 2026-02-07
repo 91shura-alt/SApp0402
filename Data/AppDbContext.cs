@@ -82,6 +82,7 @@ namespace SellerOps.App.Data
 
         // WB Promotion API (акции)
         public DbSet<WbPromotionItem> WbPromotionItems { get; set; } = null!;
+        public DbSet<WbPromotionCalendarItem> WbPromotionCalendarItems { get; set; } = null!;
 
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
