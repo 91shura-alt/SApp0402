@@ -258,8 +258,9 @@ namespace SellerOps.App.Views
             PromotionsGrid.ItemsSource = rows;
         }
 
-        private static IEnumerable<PromoRow> ParsePromotions(string rawJson)
+        private static List<PromoRow> ParsePromotions(string rawJson)
         {
+            var rows = new List<PromoRow>();
             try
             {
                 using var doc = JsonDocument.Parse(rawJson);
@@ -269,20 +270,22 @@ namespace SellerOps.App.Views
                 {
                     foreach (var p in promos.EnumerateArray())
                     {
-                        yield return new PromoRow
+                        rows.Add(new PromoRow
                         {
                             Name = TryGetString(p, "name") ?? TryGetString(p, "title") ?? "Акция",
                             RequiredDiscount = TryGetString(p, "requiredDiscount") ?? TryGetString(p, "discount") ?? "",
                             Status = TryGetString(p, "status") ?? "",
                             Details = TryGetString(p, "comment") ?? TryGetString(p, "details") ?? ""
-                        };
+                        });
                     }
                 }
             }
             catch
             {
-                yield break;
+                return rows;
             }
+
+            return rows;
         }
 
         private static string? TryExtractDescriptionFromRawJson(string? rawJson)
