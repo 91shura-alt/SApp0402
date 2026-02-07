@@ -34,6 +34,19 @@ namespace SellerOps.App.Services
         public decimal MarginPct { get; set; }             // (NetProfit / RevenueToPay) * 100
     }
 
+    public sealed class DailySummaryRow
+    {
+        public DateTime Day { get; set; }
+        public int Qty { get; set; }
+        public decimal RevenueToPay { get; set; }
+        public decimal Commission { get; set; }
+        public decimal Delivery { get; set; }
+        public decimal Storage { get; set; }
+        public decimal Penalties { get; set; }
+        public decimal Deductions { get; set; }
+        public decimal NetProfit { get; set; }
+    }
+
     public class AnalyticsService
     {
         private readonly AppDbContext _db;
@@ -124,6 +137,55 @@ namespace SellerOps.App.Services
                 .ToList();
 
             return result;
+        }
+
+        public IEnumerable<DailySummaryRow> BuildDailySummary(DateTime from, DateTime to)
+        {
+            var fromDate = from.Date;
+            var toExclusive = to.Date.AddDays(1);
+
+            var rows = _db.WbRealizationLines
+                .AsNoTracking()
+                .Where(x => x.RrDt >= fromDate && x.RrDt < toExclusive)
+                .Select(x => new
+                {
+                    Day = x.RrDt.HasValue ? x.RrDt.Value.Date : fromDate,
+                    x.Quantity,
+                    x.PpvzForPay,
+                    x.PpvzSalesCommission,
+                    x.DeliveryRub,
+                    x.StorageFee,
+                    x.Penalty,
+                    x.Deduction
+                })
+                .ToList();
+
+            return rows
+                .GroupBy(x => x.Day)
+                .Select(g =>
+                {
+                    var revenue = g.Sum(r => r.PpvzForPay);
+                    var commission = g.Sum(r => r.PpvzSalesCommission);
+                    var delivery = g.Sum(r => r.DeliveryRub);
+                    var storage = g.Sum(r => r.StorageFee);
+                    var penalties = g.Sum(r => r.Penalty);
+                    var deductions = g.Sum(r => r.Deduction);
+
+                    return new DailySummaryRow
+                    {
+                        Day = g.Key,
+                        Qty = g.Sum(r => r.Quantity),
+                        RevenueToPay = revenue,
+                        Commission = commission,
+                        Delivery = delivery,
+                        Storage = storage,
+                        Penalties = penalties,
+                        Deductions = deductions,
+                        NetProfit = revenue - commission - delivery - storage - penalties - deductions
+                    };
+                })
+                .OrderBy(x => x.Day)
+                .ToList();
         }
     }
 }
