@@ -165,7 +165,7 @@ namespace SellerOps.App.Views
                 CharGrid.ItemsSource = rows;
 
                 await LoadPricesAsync();
-                LoadPromotions();
+                await LoadPromotionsAsync();
             }
             catch (Exception ex)
             {
@@ -229,19 +229,48 @@ namespace SellerOps.App.Views
             PricesGrid.ItemsSource = rows;
         }
 
-        private void LoadPromotions()
+        private async Task LoadPromotionsAsync()
         {
             var rows = new List<PromoRow>();
             var db = AppDbContext.Instance;
 
-            var goods = db.WbPriceGoods.AsNoTracking()
+            var latestPromotionTs = await db.WbPromotionItems.AsNoTracking()
                 .Where(x => x.NmId == _nmId)
-                .OrderByDescending(x => x.ImportedAtUtc)
-                .FirstOrDefault();
+                .MaxAsync(x => (DateTime?)x.ImportedAtUtc);
 
-            if (goods != null && !string.IsNullOrWhiteSpace(goods.RawJson))
+            if (!latestPromotionTs.HasValue || DateTime.UtcNow - latestPromotionTs.Value > TimeSpan.FromHours(6))
             {
-                rows.AddRange(ParsePromotions(goods.RawJson));
+                try
+                {
+                    var svc = new WbPromotionService(db);
+                    await svc.RefreshPromotionsForNmIdAsync(_nmId);
+                }
+                catch (Exception ex)
+                {
+                    rows.Add(new PromoRow
+                    {
+                        Name = "Ошибка загрузки",
+                        RequiredDiscount = "н/д",
+                        Status = "",
+                        Details = ex.Message
+                    });
+                }
+            }
+
+            if (rows.Count == 0)
+            {
+                var promos = await db.WbPromotionItems.AsNoTracking()
+                    .Where(x => x.NmId == _nmId)
+                    .OrderByDescending(x => x.ImportedAtUtc)
+                    .ToListAsync();
+
+                rows.AddRange(promos.Select(x => new PromoRow
+                {
+                    Name = x.Name,
+                    RequiredDiscount = x.RequiredDiscount,
+                    Status = x.Status,
+                    Details = x.Details
+                }));
             }
 
             if (rows.Count == 0)
@@ -251,41 +280,11 @@ namespace SellerOps.App.Views
                     Name = "Нет данных",
                     RequiredDiscount = "н/д",
                     Status = "",
-                    Details = "Нужен импорт промо-акций через Promotion API."
+                    Details = "Промо-акции не найдены."
                 });
             }
 
             PromotionsGrid.ItemsSource = rows;
-        }
-
-        private static List<PromoRow> ParsePromotions(string rawJson)
-        {
-            var rows = new List<PromoRow>();
-            try
-            {
-                using var doc = JsonDocument.Parse(rawJson);
-                var root = doc.RootElement;
-
-                if (root.TryGetProperty("promotions", out var promos) && promos.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var p in promos.EnumerateArray())
-                    {
-                        rows.Add(new PromoRow
-                        {
-                            Name = TryGetString(p, "name") ?? TryGetString(p, "title") ?? "Акция",
-                            RequiredDiscount = TryGetString(p, "requiredDiscount") ?? TryGetString(p, "discount") ?? "",
-                            Status = TryGetString(p, "status") ?? "",
-                            Details = TryGetString(p, "comment") ?? TryGetString(p, "details") ?? ""
-                        });
-                    }
-                }
-            }
-            catch
-            {
-                return rows;
-            }
-
-            return rows;
         }
 
         private static string? TryExtractDescriptionFromRawJson(string? rawJson)
