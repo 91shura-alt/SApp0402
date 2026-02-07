@@ -131,18 +131,69 @@
                 </Grid>
 
                 <!-- Правая колонка -->
-                <GroupBox Header="Характеристики (attributes)" Grid.Column="1">
-                    <DataGrid x:Name="CharGrid"
-                              AutoGenerateColumns="False"
-                              CanUserAddRows="False"
-                              CanUserDeleteRows="False"
-                              IsReadOnly="True">
-                        <DataGrid.Columns>
-                            <DataGridTextColumn Header="Название" Binding="{Binding Name}" Width="220"/>
-                            <DataGridTextColumn Header="Значение" Binding="{Binding Value}" Width="*"/>
-                        </DataGrid.Columns>
-                    </DataGrid>
-                </GroupBox>
+                <StackPanel Grid.Column="1">
+                    <GroupBox Header="Характеристики (attributes)" Margin="0,0,0,12">
+                        <DataGrid x:Name="CharGrid"
+                                  AutoGenerateColumns="False"
+                                  CanUserAddRows="False"
+                                  CanUserDeleteRows="False"
+                                  IsReadOnly="True">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Название" Binding="{Binding Name}" Width="220"/>
+                                <DataGridTextColumn Header="Значение" Binding="{Binding Value}" Width="*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </GroupBox>
+
+                    <GroupBox Header="Цены и скидки" Margin="0,0,0,12">
+                        <DataGrid x:Name="PricesGrid"
+                                  AutoGenerateColumns="False"
+                                  CanUserAddRows="False"
+                                  CanUserDeleteRows="False"
+                                  IsReadOnly="True">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Размер" Binding="{Binding Size}" Width="100"/>
+                                <DataGridTextColumn Header="Цена" Binding="{Binding Price}" Width="100"/>
+                                <DataGridTextColumn Header="Цена со скидкой" Binding="{Binding DiscountedPrice}" Width="130"/>
+                                <DataGridTextColumn Header="Клубная цена" Binding="{Binding ClubPrice}" Width="120"/>
+                                <DataGridTextColumn Header="Скидка продавца, %" Binding="{Binding SellerDiscount}" Width="130"/>
+                                <DataGridTextColumn Header="Скидка WB клуба, %" Binding="{Binding ClubDiscount}" Width="130"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </GroupBox>
+
+                    <GroupBox Header="Акции и требуемые скидки">
+                        <DataGrid x:Name="PromotionsGrid"
+                                  AutoGenerateColumns="False"
+                                  CanUserAddRows="False"
+                                  CanUserDeleteRows="False"
+                                  IsReadOnly="True">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Акция" Binding="{Binding Name}" Width="180"/>
+                                <DataGridTextColumn Header="Требуемая скидка, %" Binding="{Binding RequiredDiscount}" Width="150"/>
+                                <DataGridTextColumn Header="Статус" Binding="{Binding Status}" Width="120"/>
+                                <DataGridTextColumn Header="Комментарий" Binding="{Binding Details}" Width="*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </GroupBox>
+
+                    <GroupBox Header="Календарь акций WB" Margin="0,12,0,0">
+                        <DataGrid x:Name="CalendarPromotionsGrid"
+                                  AutoGenerateColumns="False"
+                                  CanUserAddRows="False"
+                                  CanUserDeleteRows="False"
+                                  IsReadOnly="True">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Акция" Binding="{Binding Name}" Width="180"/>
+                                <DataGridTextColumn Header="Дата с" Binding="{Binding DateFrom}" Width="140"/>
+                                <DataGridTextColumn Header="Дата по" Binding="{Binding DateTo}" Width="140"/>
+                                <DataGridTextColumn Header="Статус" Binding="{Binding Status}" Width="120"/>
+                                <DataGridTextColumn Header="Участие" Binding="{Binding Participation}" Width="120"/>
+                                <DataGridTextColumn Header="Комментарий" Binding="{Binding Details}" Width="*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </GroupBox>
+                </StackPanel>
             </Grid>
 
             <!-- Сырый JSON -->
