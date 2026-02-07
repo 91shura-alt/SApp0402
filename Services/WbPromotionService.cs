@@ -64,13 +64,7 @@ namespace SellerOps.App.Services
         public async Task<int> RefreshPromotionsForNmIdAsync(long nmId, CancellationToken ct = default)
         {
             var (token, baseUrl) = GetCreds();
-            using var http = _http.Create(baseUrl, token, bearerHeader: false);
-
-            using var resp = await http.GetAsync("/adv/v1/promotion/adverts", ct);
-            var payload = await resp.Content.ReadAsStringAsync(ct);
-
-            if (!resp.IsSuccessStatusCode)
-                throw new InvalidOperationException($"WB Promotion adverts вернул {(int)resp.StatusCode}. См. logs.");
+            var payload = await GetPromotionsRawAsync(baseUrl, token, ct);
 
             var parsed = ParsePromotions(payload, nmId);
 
@@ -88,6 +82,30 @@ namespace SellerOps.App.Services
 
             await _db.SaveChangesAsync(ct);
             return parsed.Count;
+        }
+
+        private async Task<string> GetPromotionsRawAsync(string baseUrl, string token, CancellationToken ct)
+        {
+            using var http = _http.Create(baseUrl, token, bearerHeader: false);
+            using var resp = await http.GetAsync("/adv/v1/promotion/adverts", ct);
+            var payload = await resp.Content.ReadAsStringAsync(ct);
+
+            if (resp.IsSuccessStatusCode)
+                return payload;
+
+            if ((int)resp.StatusCode == 401)
+            {
+                using var httpBearer = _http.Create(baseUrl, token, bearerHeader: true);
+                using var respBearer = await httpBearer.GetAsync("/adv/v1/promotion/adverts", ct);
+                var payloadBearer = await respBearer.Content.ReadAsStringAsync(ct);
+
+                if (respBearer.IsSuccessStatusCode)
+                    return payloadBearer;
+
+                throw new InvalidOperationException($"WB Promotion adverts вернул {(int)respBearer.StatusCode}. {payloadBearer}");
+            }
+
+            throw new InvalidOperationException($"WB Promotion adverts вернул {(int)resp.StatusCode}. {payload}");
         }
 
         private static List<WbPromotionItem> ParsePromotions(string payload, long nmId)
