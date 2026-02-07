@@ -9,6 +9,20 @@ namespace SellerOps.App.Services
         public string? DatabasePath { get; set; }
         public bool StoreTokensAsPlainText { get; set; }
 
+        public string? EncryptedStatisticsToken { get; set; }
+        public bool StatisticsIsSandbox { get; set; }
+
+        public string? EncryptedAnalyticsToken { get; set; }
+        public bool AnalyticsIsSandbox { get; set; }
+
+        public string? EncryptedContentToken { get; set; }
+        public bool ContentIsSandbox { get; set; }
+
+        public string? EncryptedMarketplaceToken { get; set; }
+        public bool MarketplaceIsSandbox { get; set; }
+
+        public int DefaultPeriodDays { get; set; } = 7;
+
         public static AppSettings Instance { get; } = Load();
 
         public static string DefaultDatabasePath =>

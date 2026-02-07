@@ -37,7 +37,7 @@ namespace SellerOps.App.Services
                 throw new InvalidOperationException("Не найден токен категории 'PricesAndDiscounts'. Открой WB настройки и добавь токен.");
 
             if (!SecureStorage.TryUnprotect(row.EncryptedToken, out var token))
-                throw new InvalidOperationException("Токен 'PricesAndDiscounts' был сохранён на другом ПК/пользователе. Пересохраните токен в настройках WB.");
+                throw new InvalidOperationException("Токен 'PricesAndDiscounts' был сохранён на другом ПК/пользователе. Пересохраните токен в настройках WB или включите режим хранения без шифрования.");
 
             token = token?.Trim();
             if (string.IsNullOrWhiteSpace(token))

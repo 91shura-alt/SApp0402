@@ -27,6 +27,20 @@ namespace SellerOps.App.Services
 
         private (string token, string baseUrl) GetCreds()
         {
+            var localToken = AppSettings.Instance.EncryptedContentToken;
+            if (!string.IsNullOrWhiteSpace(localToken))
+            {
+                var token = SecureStorage.Unprotect(localToken)?.Trim();
+                if (string.IsNullOrWhiteSpace(token))
+                    throw new InvalidOperationException("Локальный токен 'Content' пустой/не расшифровался. Открой WB настройки и сохрани токен заново.");
+
+                var baseUrl = AppSettings.Instance.ContentIsSandbox
+                    ? "https://content-api-sandbox.wildberries.ru"
+                    : "https://content-api.wildberries.ru";
+
+                return (token!, baseUrl);
+            }
+
             var row = _db.ApiTokens.AsNoTracking()
                 .OrderByDescending(x => x.Id)
                 .FirstOrDefault(x => x.Category == "Content");
@@ -35,7 +49,7 @@ namespace SellerOps.App.Services
                 throw new InvalidOperationException("Не найден токен категории 'Content'. Открой WB настройки и добавь токен.");
 
             if (!SecureStorage.TryUnprotect(row.EncryptedToken, out var token))
-                throw new InvalidOperationException("Токен 'Content' был сохранён на другом ПК/пользователе. Пересохраните токен в настройках WB.");
+                throw new InvalidOperationException("Токен 'Content' был сохранён на другом ПК/пользователе. Пересохраните токен в настройках WB или включите режим хранения без шифрования.");
 
             token = token?.Trim();
             if (string.IsNullOrWhiteSpace(token))
