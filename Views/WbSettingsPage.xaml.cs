@@ -64,6 +64,17 @@ namespace SellerOps.App.Views
             AppSettings.Instance.Save();
         }
 
+        private void LoadTokenSettings()
+        {
+            PlainTokensBox.IsChecked = AppSettings.Instance.StoreTokensAsPlainText;
+        }
+
+        private void PlainTokensBox_Checked(object sender, RoutedEventArgs e)
+        {
+            AppSettings.Instance.StoreTokensAsPlainText = PlainTokensBox.IsChecked == true;
+            AppSettings.Instance.Save();
+        }
+
         private void SaveDbPath_Click(object sender, RoutedEventArgs e)
         {
             var raw = (DbPathBox.Text ?? string.Empty).Trim();
