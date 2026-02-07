@@ -30,6 +30,24 @@ namespace SellerOps.App.Views
             public string Value { get; set; } = "";
         }
 
+        private sealed class PriceRow
+        {
+            public string Size { get; set; } = "";
+            public string Price { get; set; } = "";
+            public string DiscountedPrice { get; set; } = "";
+            public string ClubPrice { get; set; } = "";
+            public string SellerDiscount { get; set; } = "";
+            public string ClubDiscount { get; set; } = "";
+        }
+
+        private sealed class PromoRow
+        {
+            public string Name { get; set; } = "";
+            public string RequiredDiscount { get; set; } = "";
+            public string Status { get; set; } = "";
+            public string Details { get; set; } = "";
+        }
+
         private async Task LoadAsync()
         {
             try
@@ -72,6 +90,8 @@ namespace SellerOps.App.Views
                     if (string.IsNullOrWhiteSpace(dto.Brand)) dto.Brand = p.Brand;
                     if (string.IsNullOrWhiteSpace(dto.Subject)) dto.Subject = p.Subject;
                     if (string.IsNullOrWhiteSpace(dto.VendorCode)) dto.VendorCode = p.VendorCode;
+                    if (string.IsNullOrWhiteSpace(dto.Description))
+                        dto.Description = TryExtractDescriptionFromRawJson(p.RawJson);
 
                     // если WB не дал баркоды — пробуем BarcodesJson
                     if ((dto.Barcodes == null || dto.Barcodes.Count == 0) && !string.IsNullOrWhiteSpace(p.BarcodesJson))
@@ -143,11 +163,158 @@ namespace SellerOps.App.Views
                     .ToList();
 
                 CharGrid.ItemsSource = rows;
+
+                await LoadPricesAsync();
+                LoadPromotions();
             }
             catch (Exception ex)
             {
                 MessageBox.Show(ex.Message, "Ошибка загрузки карточки", MessageBoxButton.OK, MessageBoxImage.Error);
             }
+        }
+
+        private async Task LoadPricesAsync()
+        {
+            var db = AppDbContext.Instance;
+
+            var goods = await db.WbPriceGoods.AsNoTracking()
+                .Where(x => x.NmId == _nmId)
+                .OrderByDescending(x => x.ImportedAtUtc)
+                .FirstOrDefaultAsync();
+
+            DateTime? latestSizeTs = await db.WbPriceSizes.AsNoTracking()
+                .Where(x => x.NmId == _nmId)
+                .MaxAsync(x => (DateTime?)x.ImportedAtUtc);
+
+            var sizes = latestSizeTs.HasValue
+                ? await db.WbPriceSizes.AsNoTracking()
+                    .Where(x => x.NmId == _nmId && x.ImportedAtUtc == latestSizeTs.Value)
+                    .OrderBy(x => x.TechSizeName)
+                    .ToListAsync()
+                : new List<WbPriceSize>();
+
+            var sellerDiscount = goods?.Discount?.ToString() ?? "";
+            var clubDiscount = goods?.ClubDiscount?.ToString() ?? "";
+
+            var rows = new List<PriceRow>();
+
+            if (sizes.Count > 0)
+            {
+                foreach (var size in sizes)
+                {
+                    rows.Add(new PriceRow
+                    {
+                        Size = string.IsNullOrWhiteSpace(size.TechSizeName) ? "-" : size.TechSizeName,
+                        Price = FormatMoney(size.Price),
+                        DiscountedPrice = FormatMoney(size.DiscountedPrice),
+                        ClubPrice = FormatMoney(size.ClubDiscountedPrice),
+                        SellerDiscount = sellerDiscount,
+                        ClubDiscount = clubDiscount
+                    });
+                }
+            }
+            else if (goods != null)
+            {
+                rows.Add(new PriceRow
+                {
+                    Size = "-",
+                    Price = "",
+                    DiscountedPrice = "",
+                    ClubPrice = "",
+                    SellerDiscount = sellerDiscount,
+                    ClubDiscount = clubDiscount
+                });
+            }
+
+            PricesGrid.ItemsSource = rows;
+        }
+
+        private void LoadPromotions()
+        {
+            var rows = new List<PromoRow>();
+            var db = AppDbContext.Instance;
+
+            var goods = db.WbPriceGoods.AsNoTracking()
+                .Where(x => x.NmId == _nmId)
+                .OrderByDescending(x => x.ImportedAtUtc)
+                .FirstOrDefault();
+
+            if (goods != null && !string.IsNullOrWhiteSpace(goods.RawJson))
+            {
+                rows.AddRange(ParsePromotions(goods.RawJson));
+            }
+
+            if (rows.Count == 0)
+            {
+                rows.Add(new PromoRow
+                {
+                    Name = "Нет данных",
+                    RequiredDiscount = "н/д",
+                    Status = "",
+                    Details = "Нужен импорт промо-акций через Promotion API."
+                });
+            }
+
+            PromotionsGrid.ItemsSource = rows;
+        }
+
+        private static IEnumerable<PromoRow> ParsePromotions(string rawJson)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(rawJson);
+                var root = doc.RootElement;
+
+                if (root.TryGetProperty("promotions", out var promos) && promos.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var p in promos.EnumerateArray())
+                    {
+                        yield return new PromoRow
+                        {
+                            Name = TryGetString(p, "name") ?? TryGetString(p, "title") ?? "Акция",
+                            RequiredDiscount = TryGetString(p, "requiredDiscount") ?? TryGetString(p, "discount") ?? "",
+                            Status = TryGetString(p, "status") ?? "",
+                            Details = TryGetString(p, "comment") ?? TryGetString(p, "details") ?? ""
+                        };
+                    }
+                }
+            }
+            catch
+            {
+                yield break;
+            }
+        }
+
+        private static string? TryExtractDescriptionFromRawJson(string? rawJson)
+        {
+            if (string.IsNullOrWhiteSpace(rawJson))
+                return null;
+
+            try
+            {
+                using var doc = JsonDocument.Parse(rawJson);
+                var root = doc.RootElement;
+
+                return TryGetString(root, "description")
+                    ?? TryGetString(root, "descriptionRu")
+                    ?? TryGetString(root, "descriptionEn");
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static string FormatMoney(decimal? value)
+        {
+            return value.HasValue ? value.Value.ToString("0.##") : "";
+        }
+
+        private static string? TryGetString(JsonElement e, string name)
+        {
+            return e.TryGetProperty(name, out var p)
+                ? (p.ValueKind == JsonValueKind.String ? p.GetString() : p.ToString())
+                : null;
         }
 
         private void Back_Click(object sender, RoutedEventArgs e)

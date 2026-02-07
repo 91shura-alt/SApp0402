@@ -360,11 +360,11 @@ namespace SellerOps.App.Services
                 var dto = new WbCardDetails
                 {
                     NmId = id,
-                    Title = TryGetString(c, "title") ?? "",
-                    Brand = TryGetString(c, "brand") ?? "",
-                    Subject = TryGetString(c, "subjectName") ?? TryGetString(c, "subject") ?? "",
-                    VendorCode = TryGetString(c, "vendorCode") ?? "",
-                    Description = TryGetString(c, "description") ?? "",
+                    Title = TryGetStringFromAny(c, "title", "name") ?? "",
+                    Brand = TryGetStringFromAny(c, "brand", "brandName") ?? "",
+                    Subject = TryGetStringFromAny(c, "subjectName", "subject", "subjectNameRu") ?? "",
+                    VendorCode = TryGetStringFromAny(c, "vendorCode", "supplierArticle", "article") ?? "",
+                    Description = TryGetStringFromAny(c, "description", "descriptionRu", "descriptionEn", "descriptionEN") ?? "",
                     IsArchived = TryGetBool(c, "archived") ?? false,
                     Barcodes = ExtractBarcodes(c),
                     Characteristics = ExtractCharacteristics(c),
@@ -453,6 +453,25 @@ namespace SellerOps.App.Services
                     list.Add(new WbCardDetails.CharDto { Name = name, Values = values });
                 }
             }
+            else if (c.TryGetProperty("attributes", out var attrs) && attrs.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var ch in attrs.EnumerateArray())
+                {
+                    var name = TryGetString(ch, "name") ?? "";
+                    if (string.IsNullOrWhiteSpace(name)) continue;
+
+                    var values = new List<string>();
+                    if (ch.TryGetProperty("value", out var v))
+                    {
+                        if (v.ValueKind == JsonValueKind.Array)
+                            values.AddRange(v.EnumerateArray().Select(x => x.ToString()));
+                        else if (v.ValueKind != JsonValueKind.Null)
+                            values.Add(v.ToString());
+                    }
+
+                    list.Add(new WbCardDetails.CharDto { Name = name, Values = values });
+                }
+            }
 
             return list;
         }
@@ -478,6 +497,18 @@ namespace SellerOps.App.Services
             return e.TryGetProperty(name, out var p)
                 ? (p.ValueKind == JsonValueKind.String ? p.GetString() : p.ToString())
                 : null;
+        }
+
+        private static string? TryGetStringFromAny(JsonElement e, params string[] names)
+        {
+            foreach (var name in names)
+            {
+                var value = TryGetString(e, name);
+                if (!string.IsNullOrWhiteSpace(value))
+                    return value;
+            }
+
+            return null;
         }
 
         private static long? TryGetInt64(JsonElement e, string name)
