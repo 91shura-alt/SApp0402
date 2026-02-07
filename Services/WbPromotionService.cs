@@ -114,41 +114,90 @@ namespace SellerOps.App.Services
 
         private async Task<string> GetPromotionsRawAsync(string baseUrl, string token, IReadOnlyCollection<long> advertIds, CancellationToken ct)
         {
-            var chunks = advertIds.Distinct().Chunk(50);
+            var chunkList = advertIds.Distinct().Chunk(50).ToList();
             var responses = new List<string>();
+            const int maxAttempts = 10;
+            var delayBetweenChunks = TimeSpan.FromMilliseconds(300);
 
-            foreach (var chunk in chunks)
+            for (var i = 0; i < chunkList.Count; i++)
             {
+                var chunk = chunkList[i];
                 var json = JsonSerializer.Serialize(chunk);
-                using var http = _http.Create(baseUrl, token, bearerHeader: false);
-                using var resp = await http.PostAsync("/adv/v1/promotion/adverts", new StringContent(json, System.Text.Encoding.UTF8, "application/json"), ct);
-                var payload = await resp.Content.ReadAsStringAsync(ct);
+                var handled = false;
 
-                if (resp.IsSuccessStatusCode)
+                for (int attempt = 1; attempt <= maxAttempts; attempt++)
                 {
-                    responses.Add(payload);
-                    continue;
-                }
+                    ct.ThrowIfCancellationRequested();
 
-                if ((int)resp.StatusCode == 401)
-                {
-                    using var httpBearer = _http.Create(baseUrl, token, bearerHeader: true);
-                    using var respBearer = await httpBearer.PostAsync("/adv/v1/promotion/adverts", new StringContent(json, System.Text.Encoding.UTF8, "application/json"), ct);
-                    var payloadBearer = await respBearer.Content.ReadAsStringAsync(ct);
+                    using var http = _http.Create(baseUrl, token, bearerHeader: false);
+                    using var resp = await http.PostAsync("/adv/v1/promotion/adverts", new StringContent(json, System.Text.Encoding.UTF8, "application/json"), ct);
+                    var payload = await resp.Content.ReadAsStringAsync(ct);
 
-                    if (respBearer.IsSuccessStatusCode)
+                    if (resp.IsSuccessStatusCode)
                     {
-                        responses.Add(payloadBearer);
+                        responses.Add(payload);
+                        handled = true;
+                        break;
+                    }
+
+                    if ((int)resp.StatusCode == 401)
+                    {
+                        using var httpBearer = _http.Create(baseUrl, token, bearerHeader: true);
+                        using var respBearer = await httpBearer.PostAsync("/adv/v1/promotion/adverts", new StringContent(json, System.Text.Encoding.UTF8, "application/json"), ct);
+                        var payloadBearer = await respBearer.Content.ReadAsStringAsync(ct);
+
+                        if (respBearer.IsSuccessStatusCode)
+                        {
+                            responses.Add(payloadBearer);
+                            handled = true;
+                            break;
+                        }
+
+                        if (respBearer.StatusCode == (System.Net.HttpStatusCode)429)
+                        {
+                            if (attempt == maxAttempts)
+                                throw new InvalidOperationException("WB Promotion adverts вернул 429 слишком много раз. Подожди 30-60 сек и повтори.");
+
+                            await Task.Delay(GetRetryDelay(respBearer, attempt), ct);
+                            continue;
+                        }
+
+                        throw new InvalidOperationException($"WB Promotion adverts вернул {(int)respBearer.StatusCode}. {payloadBearer}");
+                    }
+
+                    if (resp.StatusCode == (System.Net.HttpStatusCode)429)
+                    {
+                        if (attempt == maxAttempts)
+                            throw new InvalidOperationException("WB Promotion adverts вернул 429 слишком много раз. Подожди 30-60 сек и повтори.");
+
+                        await Task.Delay(GetRetryDelay(resp, attempt), ct);
                         continue;
                     }
 
-                    throw new InvalidOperationException($"WB Promotion adverts вернул {(int)respBearer.StatusCode}. {payloadBearer}");
+                    throw new InvalidOperationException($"WB Promotion adverts вернул {(int)resp.StatusCode}. {payload}");
                 }
 
-                throw new InvalidOperationException($"WB Promotion adverts вернул {(int)resp.StatusCode}. {payload}");
+                if (!handled)
+                    throw new InvalidOperationException("WB Promotion adverts: не удалось выполнить запрос (retry exhausted).");
+
+                if (i < chunkList.Count - 1)
+                    await Task.Delay(delayBetweenChunks, ct);
             }
 
             return $"[{string.Join(',', responses)}]";
+        }
+
+        private static TimeSpan GetRetryDelay(HttpResponseMessage resp, int attempt)
+        {
+            if (resp.Headers.TryGetValues("Retry-After", out var vals))
+            {
+                var v = vals.FirstOrDefault();
+                if (int.TryParse(v, out var seconds) && seconds > 0)
+                    return TimeSpan.FromSeconds(Math.Min(60, seconds));
+            }
+
+            var sec = Math.Min(60, (int)Math.Pow(2, attempt));
+            return TimeSpan.FromSeconds(sec);
         }
 
         private static List<long> ExtractAdvertIds(string payload)
