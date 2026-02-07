@@ -69,13 +69,33 @@ namespace SellerOps.App.Services
         public async Task<int> RefreshPromotionsForNmIdAsync(long nmId, CancellationToken ct = default)
         {
             var (token, baseUrl) = GetCreds();
-            var advertIds = await GetPromotionAdvertIdsAsync(baseUrl, token, ct);
-            if (advertIds.Count == 0)
-                throw new InvalidOperationException("WB Promotion: не удалось получить список кампаний (advertIds).");
+            var calendarBaseUrl = GetCalendarBaseUrl();
+            List<WbPromotionItem> parsed;
+            Exception? calendarError = null;
 
-            var payload = await GetPromotionsRawAsync(baseUrl, token, advertIds, ct);
+            try
+            {
+                var payloadCalendar = await GetCalendarNomenclaturesRawAsync(calendarBaseUrl, token, nmId, ct);
+                parsed = ParseCalendarNomenclatures(payloadCalendar, nmId);
+            }
+            catch (Exception ex)
+            {
+                calendarError = ex;
+                parsed = new List<WbPromotionItem>();
+            }
 
-            var parsed = ParsePromotions(payload, nmId);
+            if (parsed.Count == 0)
+            {
+                var advertIds = await GetPromotionAdvertIdsAsync(baseUrl, token, ct);
+                if (advertIds.Count == 0)
+                    throw new InvalidOperationException("WB Promotion: не удалось получить список кампаний (advertIds).");
+
+                var payload = await GetPromotionsRawAsync(baseUrl, token, advertIds, ct);
+                parsed = ParsePromotions(payload, nmId);
+
+                if (parsed.Count == 0 && calendarError != null)
+                    throw new InvalidOperationException($"WB Promotion: календарь акций вернул ошибку: {calendarError.Message}");
+            }
 
             var importedAt = DateTime.UtcNow;
             var existing = await _db.WbPromotionItems.Where(x => x.NmId == nmId).ToListAsync(ct);
@@ -189,6 +209,58 @@ namespace SellerOps.App.Services
             }
 
             throw new InvalidOperationException("WB Promotion calendar: не удалось выполнить запрос (retry exhausted).");
+        }
+
+        private async Task<string> GetCalendarNomenclaturesRawAsync(string baseUrl, string token, long nmId, CancellationToken ct)
+        {
+            const int maxAttempts = 6;
+            var url = $"/api/v1/calendar/promotions/nomenclatures?nmId={nmId}";
+
+            for (int attempt = 1; attempt <= maxAttempts; attempt++)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                using var http = _http.Create(baseUrl, token, bearerHeader: false);
+                using var resp = await http.GetAsync(url, ct);
+                var payload = await resp.Content.ReadAsStringAsync(ct);
+
+                if (resp.IsSuccessStatusCode)
+                    return payload;
+
+                if ((int)resp.StatusCode == 401)
+                {
+                    using var httpBearer = _http.Create(baseUrl, token, bearerHeader: true);
+                    using var respBearer = await httpBearer.GetAsync(url, ct);
+                    var payloadBearer = await respBearer.Content.ReadAsStringAsync(ct);
+
+                    if (respBearer.IsSuccessStatusCode)
+                        return payloadBearer;
+
+                    if (respBearer.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+                    {
+                        if (attempt == maxAttempts)
+                            throw new InvalidOperationException("WB Promotion calendar nomenclatures вернул 429 слишком много раз. Подожди 30-60 сек и повтори.");
+
+                        await Task.Delay(GetRetryDelay(respBearer, attempt), ct);
+                        continue;
+                    }
+
+                    throw new InvalidOperationException($"WB Promotion calendar nomenclatures вернул {(int)respBearer.StatusCode}. {payloadBearer}");
+                }
+
+                if (resp.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+                {
+                    if (attempt == maxAttempts)
+                        throw new InvalidOperationException("WB Promotion calendar nomenclatures вернул 429 слишком много раз. Подожди 30-60 сек и повтори.");
+
+                    await Task.Delay(GetRetryDelay(resp, attempt), ct);
+                    continue;
+                }
+
+                throw new InvalidOperationException($"WB Promotion calendar nomenclatures вернул {(int)resp.StatusCode}. {payload}");
+            }
+
+            throw new InvalidOperationException("WB Promotion calendar nomenclatures: не удалось выполнить запрос (retry exhausted).");
         }
 
         private async Task<string> GetPromotionsRawAsync(string baseUrl, string token, IReadOnlyCollection<long> advertIds, CancellationToken ct)
@@ -354,6 +426,23 @@ namespace SellerOps.App.Services
             return result;
         }
 
+        private static List<WbPromotionItem> ParseCalendarNomenclatures(string payload, long nmId)
+        {
+            var result = new List<WbPromotionItem>();
+
+            try
+            {
+                using var doc = JsonDocument.Parse(payload);
+                ExtractCalendarNomenclatures(doc.RootElement, nmId, result);
+            }
+            catch
+            {
+                // игнор — вернём пустой список
+            }
+
+            return result;
+        }
+
         private static void ExtractPromotions(JsonElement element, long nmId, List<WbPromotionItem> result)
         {
             switch (element.ValueKind)
@@ -442,6 +531,49 @@ namespace SellerOps.App.Services
                 case JsonValueKind.Array:
                     foreach (var item in element.EnumerateArray())
                         ExtractCalendarPromotions(item, nmId, result);
+                    break;
+            }
+        }
+
+        private static void ExtractCalendarNomenclatures(JsonElement element, long nmId, List<WbPromotionItem> result)
+        {
+            switch (element.ValueKind)
+            {
+                case JsonValueKind.Object:
+                    if (ContainsNmCalendar(element, nmId))
+                    {
+                        var name = TryGetStringFromAny(element, "action_name", "name", "title");
+                        var required = TryGetStringFromAny(element, "requiredDiscount", "minDiscount", "discount", "discountPercent", "discountPercentRequired");
+                        var status = TryGetStringFromAny(element, "status", "state");
+                        var details = TryGetStringFromAny(element, "message", "comment", "details", "description", "bottomText1", "bottomText2");
+                        var promoId = TryGetInt64FromAny(element, "id", "promotionId", "advertId", "actionId");
+
+                        if (string.IsNullOrWhiteSpace(name)
+                            && string.IsNullOrWhiteSpace(required)
+                            && string.IsNullOrWhiteSpace(status)
+                            && string.IsNullOrWhiteSpace(details)
+                            && !promoId.HasValue)
+                        {
+                            break;
+                        }
+
+                        result.Add(new WbPromotionItem
+                        {
+                            PromotionId = promoId,
+                            Name = string.IsNullOrWhiteSpace(name) ? "Акция" : name,
+                            RequiredDiscount = required ?? "",
+                            Status = status ?? "",
+                            Details = details ?? "",
+                            RawJson = element.GetRawText()
+                        });
+                    }
+
+                    foreach (var prop in element.EnumerateObject())
+                        ExtractCalendarNomenclatures(prop.Value, nmId, result);
+                    break;
+                case JsonValueKind.Array:
+                    foreach (var item in element.EnumerateArray())
+                        ExtractCalendarNomenclatures(item, nmId, result);
                     break;
             }
         }
