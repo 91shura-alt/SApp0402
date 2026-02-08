@@ -165,10 +165,13 @@ namespace SellerOps.App.Services
             throw new InvalidOperationException($"WB Promotion count вернул {(int)resp.StatusCode}. {payload}");
         }
 
-        private async Task<string> GetCalendarPromotionsRawAsync(string baseUrl, string token, CancellationToken ct)
+        private const int CalendarPageSize = 1000;
+        private static readonly TimeSpan CalendarThrottleDelay = TimeSpan.FromMilliseconds(300);
+
+        private async Task<string> GetCalendarPromotionsPageAsync(string baseUrl, string token, int limit, int offset, CancellationToken ct)
         {
             const int maxAttempts = 6;
-            var url = BuildCalendarUrl("/api/v1/calendar/promotions", null);
+            var url = BuildCalendarPromotionsUrl(limit, offset);
 
             for (int attempt = 1; attempt <= maxAttempts; attempt++)
             {
@@ -223,10 +226,10 @@ namespace SellerOps.App.Services
             throw new InvalidOperationException("WB Promotion calendar: не удалось выполнить запрос (retry exhausted).");
         }
 
-        private async Task<string> GetCalendarNomenclaturesRawAsync(string baseUrl, string token, long promotionId, bool inAction, CancellationToken ct)
+        private async Task<string> GetPromotionNomenclaturesPageAsync(string baseUrl, string token, long promotionId, bool inAction, int limit, int offset, CancellationToken ct)
         {
             const int maxAttempts = 6;
-            var url = BuildCalendarNomenclaturesUrl(promotionId, inAction);
+            var url = BuildCalendarNomenclaturesUrl(promotionId, inAction, limit, offset);
 
             for (int attempt = 1; attempt <= maxAttempts; attempt++)
             {
@@ -288,47 +291,48 @@ namespace SellerOps.App.Services
             return (start.ToString("yyyy-MM-ddTHH:mm:ssZ"), end.ToString("yyyy-MM-ddTHH:mm:ssZ"));
         }
 
-        private static string BuildCalendarUrl(string path, long? nmId)
+        private static string BuildCalendarPromotionsUrl(int limit, int offset)
         {
             var (startDateTime, endDateTime) = GetCalendarRange();
             var start = Uri.EscapeDataString(startDateTime);
             var end = Uri.EscapeDataString(endDateTime);
 
-            var baseQuery = $"startDateTime={start}&endDateTime={end}&allPromo=true&limit=1000&offset=0";
-            if (nmId.HasValue)
-                return $"{path}?nmId={nmId.Value}&{baseQuery}";
-
-            return $"{path}?{baseQuery}";
+            return $"/api/v1/calendar/promotions?startDateTime={start}&endDateTime={end}&allPromo=true&limit={limit}&offset={offset}";
         }
 
-        private static string BuildCalendarNomenclaturesUrl(long promotionId, bool inAction)
+        private static string BuildCalendarNomenclaturesUrl(long promotionId, bool inAction, int limit, int offset)
         {
-            return $"/api/v1/calendar/promotions/nomenclatures?promotionID={promotionId}&inAction={inAction.ToString().ToLowerInvariant()}&limit=1000&offset=0";
+            return $"/api/v1/calendar/promotions/nomenclatures?promotionID={promotionId}&inAction={inAction.ToString().ToLowerInvariant()}&limit={limit}&offset={offset}";
         }
 
         private async Task<List<WbPromotionCalendarItem>> LoadCalendarEntriesAsync(string baseUrl, string token, long nmId, CancellationToken ct)
         {
-            var payload = await GetCalendarPromotionsRawAsync(baseUrl, token, ct);
-            var promotions = ParseCalendarPromotions(payload);
+            var promotions = await LoadCalendarPromotionsAsync(baseUrl, token, ct);
             var result = new List<WbPromotionCalendarItem>();
+            var seenPromotions = new HashSet<long>();
 
             foreach (var promo in promotions)
             {
+                if (!seenPromotions.Add(promo.Id))
+                    continue;
+
                 if (string.Equals(promo.Type, "regular", StringComparison.OrdinalIgnoreCase))
                 {
                     var found = await TryLoadNomenclatureAsync(baseUrl, token, promo.Id, nmId, ct);
-                    if (found == null)
-                        continue;
+                    var participation = found?.InAction == true ? "Да" : "Нет";
+                    var details = found == null
+                        ? ""
+                        : $"price={found.Price}; planPrice={found.PlanPrice}; discount={found.Discount}; planDiscount={found.PlanDiscount}";
 
                     result.Add(new WbPromotionCalendarItem
                     {
                         PromotionId = promo.Id,
                         Name = promo.Name,
                         Status = promo.Type,
-                        Participation = found.InAction ? "Да" : "Нет",
+                        Participation = participation,
                         DateFrom = promo.StartDateTime ?? "",
                         DateTo = promo.EndDateTime ?? "",
-                        Details = $"price={found.Price}; planPrice={found.PlanPrice}; discount={found.Discount}; planDiscount={found.PlanDiscount}"
+                        Details = details
                     });
                     continue;
                 }
@@ -353,12 +357,15 @@ namespace SellerOps.App.Services
 
         private async Task<List<WbPromotionItem>> LoadPromotionsFromCalendarAsync(string baseUrl, string token, long nmId, CancellationToken ct)
         {
-            var payload = await GetCalendarPromotionsRawAsync(baseUrl, token, ct);
-            var promotions = ParseCalendarPromotions(payload);
+            var promotions = await LoadCalendarPromotionsAsync(baseUrl, token, ct);
             var result = new List<WbPromotionItem>();
+            var seenPromotions = new HashSet<long>();
 
             foreach (var promo in promotions)
             {
+                if (!seenPromotions.Add(promo.Id))
+                    continue;
+
                 if (!string.Equals(promo.Type, "regular", StringComparison.OrdinalIgnoreCase))
                     continue;
 
@@ -371,7 +378,7 @@ namespace SellerOps.App.Services
                     PromotionId = promo.Id,
                     Name = promo.Name,
                     RequiredDiscount = found.PlanDiscount,
-                    Status = found.InAction ? "В акции" : "Можно войти",
+                    Status = found.InAction ? "Участвует" : "Не участвует",
                     Details = $"price={found.Price}; planPrice={found.PlanPrice}; currentDiscount={found.Discount}; planDiscount={found.PlanDiscount}"
                 });
             }
@@ -381,26 +388,58 @@ namespace SellerOps.App.Services
 
         private async Task<NomenclatureInfo?> TryLoadNomenclatureAsync(string baseUrl, string token, long promotionId, long nmId, CancellationToken ct)
         {
-            var payload = await GetCalendarNomenclaturesRawAsync(baseUrl, token, promotionId, true, ct);
-            var found = ParseNomenclatures(payload, nmId);
+            var found = await TryFindNomenclatureAsync(baseUrl, token, promotionId, nmId, true, ct);
             if (found != null)
-            {
-                found.InAction = true;
                 return found;
+
+            return await TryFindNomenclatureAsync(baseUrl, token, promotionId, nmId, false, ct);
+        }
+
+        private async Task<NomenclatureInfo?> TryFindNomenclatureAsync(string baseUrl, string token, long promotionId, long nmId, bool inAction, CancellationToken ct)
+        {
+            var offset = 0;
+
+            while (true)
+            {
+                var payload = await GetPromotionNomenclaturesPageAsync(baseUrl, token, promotionId, inAction, CalendarPageSize, offset, ct);
+                var page = ParseNomenclaturesPage(payload);
+                if (page.Items.Count > 0)
+                {
+                    var match = page.Items.FirstOrDefault(item => item.Id == nmId);
+                    if (match != null)
+                    {
+                        match.InAction = inAction;
+                        return match;
+                    }
+                }
+
+                if (page.Items.Count < CalendarPageSize)
+                    return null;
+
+                offset += CalendarPageSize;
+                await Task.Delay(CalendarThrottleDelay, ct);
+            }
+        }
+
+        private async Task<List<CalendarPromotion>> LoadCalendarPromotionsAsync(string baseUrl, string token, CancellationToken ct)
+        {
+            var offset = 0;
+            var result = new List<CalendarPromotion>();
+
+            while (true)
+            {
+                var payload = await GetCalendarPromotionsPageAsync(baseUrl, token, CalendarPageSize, offset, ct);
+                var page = ParseCalendarPromotionsPage(payload);
+                result.AddRange(page);
+
+                if (page.Count < CalendarPageSize)
+                    break;
+
+                offset += CalendarPageSize;
+                await Task.Delay(CalendarThrottleDelay, ct);
             }
 
-            await Task.Delay(TimeSpan.FromMilliseconds(650), ct);
-
-            payload = await GetCalendarNomenclaturesRawAsync(baseUrl, token, promotionId, false, ct);
-            found = ParseNomenclatures(payload, nmId);
-            if (found != null)
-            {
-                found.InAction = false;
-                return found;
-            }
-
-            await Task.Delay(TimeSpan.FromMilliseconds(650), ct);
-            return null;
+            return result;
         }
 
         private async Task<string> GetPromotionsRawAsync(string baseUrl, string token, IReadOnlyCollection<long> advertIds, CancellationToken ct)
@@ -532,31 +571,25 @@ namespace SellerOps.App.Services
             }
         }
 
-        private static List<WbPromotionItem> ParsePromotions(string payload, long nmId)
-        {
-            var result = new List<WbPromotionItem>();
-
-            try
-            {
-                using var doc = JsonDocument.Parse(payload);
-                ExtractPromotions(doc.RootElement, nmId, result);
-            }
-            catch
-            {
-                // игнор — вернём пустой список
-            }
-
-            return result;
-        }
-
-        private static List<CalendarPromotion> ParseCalendarPromotions(string payload)
+        private static List<CalendarPromotion> ParseCalendarPromotionsPage(string payload)
         {
             var result = new List<CalendarPromotion>();
 
             try
             {
                 using var doc = JsonDocument.Parse(payload);
-                ExtractCalendarPromotions(doc.RootElement, result);
+                if (doc.RootElement.ValueKind == JsonValueKind.Object
+                    && doc.RootElement.TryGetProperty("data", out var data)
+                    && data.TryGetProperty("promotions", out var promotions)
+                    && promotions.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var item in promotions.EnumerateArray())
+                    {
+                        var promotion = ParsePromotion(item);
+                        if (promotion != null)
+                            result.Add(promotion);
+                    }
+                }
             }
             catch
             {
@@ -567,125 +600,42 @@ namespace SellerOps.App.Services
         }
 
 
-        private static void ExtractPromotions(JsonElement element, long nmId, List<WbPromotionItem> result)
+        private static CalendarPromotion? ParsePromotion(JsonElement item)
         {
-            switch (element.ValueKind)
+            if (item.ValueKind != JsonValueKind.Object)
+                return null;
+
+            if (!item.TryGetProperty("id", out var idEl))
+                return null;
+
+            var id = ParseLong(idEl);
+            if (!id.HasValue)
+                return null;
+
+            if (!item.TryGetProperty("name", out var nameEl))
+                return null;
+
+            var name = nameEl.GetString();
+            if (string.IsNullOrWhiteSpace(name))
+                return null;
+
+            var type = item.TryGetProperty("type", out var typeEl) ? typeEl.GetString() ?? "" : "";
+            var start = item.TryGetProperty("startDateTime", out var startEl) ? startEl.GetString() : null;
+            var end = item.TryGetProperty("endDateTime", out var endEl) ? endEl.GetString() : null;
+
+            return new CalendarPromotion
             {
-                case JsonValueKind.Object:
-                    if (ContainsNm(element, nmId))
-                    {
-                        var name = TryGetStringFromAny(element, "name", "title");
-                        var required = TryGetStringFromAny(element, "requiredDiscount", "minDiscount", "discount", "discountPercent");
-                        var status = TryGetStringFromAny(element, "status", "state");
-                        var details = TryGetStringFromAny(element, "comment", "details", "description");
-                        var promoId = TryGetInt64FromAny(element, "id", "promotionId", "advertId");
-
-                        if (string.IsNullOrWhiteSpace(name)
-                            && string.IsNullOrWhiteSpace(required)
-                            && string.IsNullOrWhiteSpace(status)
-                            && string.IsNullOrWhiteSpace(details)
-                            && !promoId.HasValue)
-                        {
-                            break;
-                        }
-
-                        result.Add(new WbPromotionItem
-                        {
-                            PromotionId = promoId,
-                            Name = string.IsNullOrWhiteSpace(name) ? "Акция" : name,
-                            RequiredDiscount = required ?? "",
-                            Status = status ?? "",
-                            Details = details ?? "",
-                            RawJson = element.GetRawText()
-                        });
-                    }
-
-                    foreach (var prop in element.EnumerateObject())
-                        ExtractPromotions(prop.Value, nmId, result);
-                    break;
-                case JsonValueKind.Array:
-                    foreach (var item in element.EnumerateArray())
-                        ExtractPromotions(item, nmId, result);
-                    break;
-            }
+                Id = id.Value,
+                Name = name,
+                Type = type,
+                StartDateTime = start,
+                EndDateTime = end
+            };
         }
 
-        private static void ExtractCalendarPromotions(JsonElement element, List<CalendarPromotion> result)
+        private static NomenclaturesPage ParseNomenclaturesPage(string payload)
         {
-            switch (element.ValueKind)
-            {
-                case JsonValueKind.Object:
-                    if (element.TryGetProperty("data", out var data))
-                        ExtractCalendarPromotions(data, result);
-                    if (element.TryGetProperty("promotions", out var promotions))
-                        ExtractCalendarPromotions(promotions, result);
-                    if (element.TryGetProperty("promotion", out var promotion))
-                        ExtractCalendarPromotions(promotion, result);
-
-                    if (TryGetInt64FromAny(element, "id", "promotionId", "actionId") is long id)
-                    {
-                        var name = TryGetStringFromAny(element, "name", "action_name", "title") ?? "Акция";
-                        var type = TryGetStringFromAny(element, "type") ?? "";
-                        var start = TryGetStringFromAny(element, "startDateTime", "date_from", "start", "from");
-                        var end = TryGetStringFromAny(element, "endDateTime", "date_to", "end", "to");
-
-                        result.Add(new CalendarPromotion
-                        {
-                            Id = id,
-                            Name = name,
-                            Type = type,
-                            StartDateTime = start,
-                            EndDateTime = end
-                        });
-                    }
-                    else
-                    {
-                        foreach (var prop in element.EnumerateObject())
-                            ExtractCalendarPromotions(prop.Value, result);
-                    }
-                    break;
-                case JsonValueKind.Array:
-                    foreach (var item in element.EnumerateArray())
-                        ExtractCalendarPromotions(item, result);
-                    break;
-            }
-        }
-
-        private static bool ContainsNm(JsonElement element, long nmId)
-        {
-            if (TryGetInt64FromAny(element, "nmId", "nm", "nmID") == nmId)
-                return true;
-
-            if (ContainsNmInArray(element, nmId, "nms", "nmIds", "nm_ids", "nmID"))
-                return true;
-
-            return false;
-        }
-
-        private static bool ContainsNmInArray(JsonElement element, long nmId, params string[] names)
-        {
-            foreach (var name in names)
-            {
-                if (!element.TryGetProperty(name, out var nms) || nms.ValueKind != JsonValueKind.Array)
-                    continue;
-
-                foreach (var item in nms.EnumerateArray())
-                {
-                    if (item.ValueKind == JsonValueKind.Number && item.TryGetInt64(out var v) && v == nmId)
-                        return true;
-                    if (item.ValueKind == JsonValueKind.String && long.TryParse(item.GetString(), out var vs) && vs == nmId)
-                        return true;
-                    if (item.ValueKind == JsonValueKind.Object
-                        && TryGetInt64FromAny(item, "nmId", "nm", "nmID") == nmId)
-                        return true;
-                }
-            }
-
-            return false;
-        }
-
-        private static NomenclatureInfo? ParseNomenclatures(string payload, long nmId)
-        {
+            var result = new List<NomenclatureInfo>();
             try
             {
                 using var doc = JsonDocument.Parse(payload);
@@ -696,33 +646,58 @@ namespace SellerOps.App.Services
                 {
                     foreach (var item in nms.EnumerateArray())
                     {
-                        if (!item.TryGetProperty("id", out var idEl))
-                            continue;
-
-                        if (idEl.ValueKind == JsonValueKind.Number && idEl.TryGetInt64(out var id) && id == nmId)
-                            return BuildNomenclatureInfo(item);
-                        if (idEl.ValueKind == JsonValueKind.String && long.TryParse(idEl.GetString(), out var sid) && sid == nmId)
-                            return BuildNomenclatureInfo(item);
+                        var info = ParseNomenclature(item);
+                        if (info != null)
+                            result.Add(info);
                     }
                 }
             }
             catch
             {
-                return null;
+                return new NomenclaturesPage(result);
             }
 
-            return null;
+            return new NomenclaturesPage(result);
         }
 
-        private static NomenclatureInfo BuildNomenclatureInfo(JsonElement item)
+        private static NomenclatureInfo? ParseNomenclature(JsonElement item)
         {
+            if (item.ValueKind != JsonValueKind.Object)
+                return null;
+
+            if (!item.TryGetProperty("id", out var idEl))
+                return null;
+
+            var id = ParseLong(idEl);
+            if (!id.HasValue)
+                return null;
+
             return new NomenclatureInfo
             {
-                Price = TryGetStringFromAny(item, "price") ?? "",
-                PlanPrice = TryGetStringFromAny(item, "planPrice") ?? "",
-                Discount = TryGetStringFromAny(item, "discount") ?? "",
-                PlanDiscount = TryGetStringFromAny(item, "planDiscount") ?? ""
+                Id = id.Value,
+                Price = GetJsonValue(item, "price"),
+                PlanPrice = GetJsonValue(item, "planPrice"),
+                Discount = GetJsonValue(item, "discount"),
+                PlanDiscount = GetJsonValue(item, "planDiscount")
             };
+        }
+
+        private static string GetJsonValue(JsonElement item, string name)
+        {
+            if (!item.TryGetProperty(name, out var value))
+                return "";
+
+            return value.ValueKind == JsonValueKind.String ? value.GetString() ?? "" : value.ToString();
+        }
+
+        private static long? ParseLong(JsonElement element)
+        {
+            if (element.ValueKind == JsonValueKind.Number && element.TryGetInt64(out var v))
+                return v;
+            if (element.ValueKind == JsonValueKind.String && long.TryParse(element.GetString(), out var s))
+                return s;
+
+            return null;
         }
 
         private sealed class CalendarPromotion
@@ -736,11 +711,22 @@ namespace SellerOps.App.Services
 
         private sealed class NomenclatureInfo
         {
+            public long Id { get; set; }
             public bool InAction { get; set; }
             public string Price { get; set; } = "";
             public string PlanPrice { get; set; } = "";
             public string Discount { get; set; } = "";
             public string PlanDiscount { get; set; } = "";
+        }
+
+        private sealed class NomenclaturesPage
+        {
+            public NomenclaturesPage(List<NomenclatureInfo> items)
+            {
+                Items = items;
+            }
+
+            public List<NomenclatureInfo> Items { get; }
         }
 
         private async Task SaveRawAsync(string kind, string fileName, string json, CancellationToken ct)
@@ -769,36 +755,5 @@ namespace SellerOps.App.Services
             return value.Length <= max ? value : value.Substring(0, max) + "...";
         }
 
-        private static string? TryGetStringFromAny(JsonElement element, params string[] names)
-        {
-            foreach (var name in names)
-            {
-                if (element.TryGetProperty(name, out var p))
-                {
-                    if (p.ValueKind == JsonValueKind.String)
-                        return p.GetString();
-                    if (p.ValueKind != JsonValueKind.Null)
-                        return p.ToString();
-                }
-            }
-
-            return null;
-        }
-
-        private static long? TryGetInt64FromAny(JsonElement element, params string[] names)
-        {
-            foreach (var name in names)
-            {
-                if (element.TryGetProperty(name, out var p))
-                {
-                    if (p.ValueKind == JsonValueKind.Number && p.TryGetInt64(out var v))
-                        return v;
-                    if (p.ValueKind == JsonValueKind.String && long.TryParse(p.GetString(), out var s))
-                        return s;
-                }
-            }
-
-            return null;
-        }
     }
 }
