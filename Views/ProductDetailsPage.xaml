@@ -3,135 +3,182 @@
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       Title="Карточка товара">
     <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <Grid Margin="12" MaxWidth="1200">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-            </Grid.RowDefinitions>
-
-            <!-- Шапка -->
-            <StackPanel Orientation="Horizontal" Grid.Row="0" Margin="0,0,0,12">
-                <Button Content="← Назад" Click="Back_Click" Width="100" Margin="0,0,12,0"/>
-                <TextBlock x:Name="TitleBlock" FontSize="22" FontWeight="Bold" VerticalAlignment="Center"/>
-            </StackPanel>
-
-            <!-- Основной блок -->
-            <Grid Grid.Row="1">
+        <StackPanel Margin="12" MaxWidth="1400">
+            <!-- Верхняя панель -->
+            <Grid Margin="0,0,0,12">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="2.5*"/>
-                    <ColumnDefinition Width="3*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Button Content="← Назад" Click="Back_Click" Width="100" Margin="0,0,12,0"/>
+                <TextBlock x:Name="TitleBlock" Grid.Column="1" FontSize="22" FontWeight="Bold" VerticalAlignment="Center"/>
+                <ComboBox x:Name="PeriodCombo" Grid.Column="2" Width="140" Margin="0,0,12,0" VerticalAlignment="Center"
+                          SelectionChanged="PeriodCombo_SelectionChanged">
+                    <ComboBoxItem Content="7 дней" Tag="7"/>
+                    <ComboBoxItem Content="14 дней" Tag="14"/>
+                    <ComboBoxItem Content="30 дней" Tag="30" IsSelected="True"/>
+                    <ComboBoxItem Content="90 дней" Tag="90"/>
+                    <ComboBoxItem Content="Custom" Tag="0"/>
+                </ComboBox>
+                <Button x:Name="RefreshButton" Grid.Column="3" Content="Обновить данные" Click="Refresh_Click" Padding="12,6"/>
+            </Grid>
+
+            <!-- Основной layout -->
+            <Grid Margin="0,0,0,12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- Левая колонка -->
-                <Grid Grid.Column="0">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                    </Grid.RowDefinitions>
-
-                    <Grid Margin="0,0,18,6" Grid.Row="0">
+                <GroupBox Header="Товар" Grid.Column="0" Margin="0,0,12,0">
+                    <Grid Margin="8">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="180"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
                         <TextBlock Text="Артикул WB:" FontWeight="Bold"/>
-                        <TextBox x:Name="NmIdBox" Grid.Column="1" IsReadOnly="True" BorderThickness="0" Background="Transparent"/>
+                        <TextBlock x:Name="NmIdValue" Grid.Column="1"/>
+                        <TextBlock Text="Артикул поставщика:" Grid.Row="1" FontWeight="Bold"/>
+                        <TextBlock x:Name="VendorCodeValue" Grid.Row="1" Grid.Column="1"/>
+                        <TextBlock Text="Штрихкоды:" Grid.Row="2" FontWeight="Bold"/>
+                        <TextBlock x:Name="BarcodesValue" Grid.Row="2" Grid.Column="1" TextWrapping="Wrap"/>
+                        <TextBlock Text="Предмет:" Grid.Row="3" FontWeight="Bold"/>
+                        <TextBlock x:Name="SubjectValue" Grid.Row="3" Grid.Column="1"/>
+                        <TextBlock Text="Себестоимость:" Grid.Row="4" FontWeight="Bold"/>
+                        <TextBlock x:Name="CostValue" Grid.Row="4" Grid.Column="1"/>
+                        <TextBlock Text="Подготовка:" Grid.Row="5" FontWeight="Bold"/>
+                        <TextBlock x:Name="PrepValue" Grid.Row="5" Grid.Column="1"/>
+                        <TextBlock Text="Рейтинг:" Grid.Row="6" FontWeight="Bold"/>
+                        <TextBlock x:Name="RatingValue" Grid.Row="6" Grid.Column="1"/>
+                        <TextBlock Text="Отзывы:" Grid.Row="7" FontWeight="Bold"/>
+                        <TextBlock x:Name="ReviewsValue" Grid.Row="7" Grid.Column="1"/>
+                        <TextBlock Text="Ссылка WB:" Grid.Row="8" FontWeight="Bold"/>
+                        <TextBox x:Name="LinksValue" Grid.Row="8" Grid.Column="1" IsReadOnly="True"
+                                 BorderThickness="0" Background="Transparent" TextWrapping="Wrap"/>
                     </Grid>
+                </GroupBox>
 
-                    <Grid Margin="0,0,18,6" Grid.Row="1">
+                <GroupBox Header="Продажи" Grid.Column="1" Margin="0,0,12,0">
+                    <Grid Margin="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="200"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Text="Цена без скидки:" FontWeight="Bold"/>
+                        <TextBlock x:Name="PriceNoDiscountValue" Grid.Column="1"/>
+                        <TextBlock Text="Цена со скидкой:" Grid.Row="1" FontWeight="Bold"/>
+                        <TextBlock x:Name="PriceWithDiscountValue" Grid.Row="1" Grid.Column="1"/>
+                        <TextBlock Text="Заказы:" Grid.Row="2" FontWeight="Bold"/>
+                        <TextBlock x:Name="OrdersValue" Grid.Row="2" Grid.Column="1"/>
+                        <TextBlock Text="Продажи:" Grid.Row="3" FontWeight="Bold"/>
+                        <TextBlock x:Name="SalesValue" Grid.Row="3" Grid.Column="1"/>
+                        <TextBlock Text="Возвраты:" Grid.Row="4" FontWeight="Bold"/>
+                        <TextBlock x:Name="ReturnsValue" Grid.Row="4" Grid.Column="1"/>
+                        <TextBlock Text="% выкупа:" Grid.Row="5" FontWeight="Bold"/>
+                        <TextBlock x:Name="BuyoutValue" Grid.Row="5" Grid.Column="1"/>
+                        <TextBlock Text="Дни с продажами:" Grid.Row="6" FontWeight="Bold"/>
+                        <TextBlock x:Name="SalesDaysValue" Grid.Row="6" Grid.Column="1"/>
+                        <TextBlock Text="Тренд:" Grid.Row="7" FontWeight="Bold"/>
+                        <TextBlock x:Name="TrendValue" Grid.Row="7" Grid.Column="1"/>
+                    </Grid>
+                </GroupBox>
+
+                <GroupBox Header="Финансы" Grid.Column="2">
+                    <Grid Margin="8">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="180"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="Бренд:" FontWeight="Bold"/>
-                        <TextBox x:Name="BrandBox" Grid.Column="1" IsReadOnly="True" BorderThickness="0" Background="Transparent"/>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Text="Выручка:" FontWeight="Bold"/>
+                        <TextBlock x:Name="RevenueValue" Grid.Column="1"/>
+                        <TextBlock Text="Расходы:" Grid.Row="1" FontWeight="Bold"/>
+                        <TextBlock x:Name="ExpensesValue" Grid.Row="1" Grid.Column="1"/>
+                        <TextBlock Text="Прибыль:" Grid.Row="2" FontWeight="Bold"/>
+                        <TextBlock x:Name="ProfitValue" Grid.Row="2" Grid.Column="1"/>
+                        <TextBlock Text="Маржинальность:" Grid.Row="3" FontWeight="Bold"/>
+                        <TextBlock x:Name="MarginValue" Grid.Row="3" Grid.Column="1"/>
+                        <TextBlock Text="ROI/окупаемость:" Grid.Row="4" FontWeight="Bold"/>
+                        <TextBlock x:Name="RoiValue" Grid.Row="4" Grid.Column="1"/>
                     </Grid>
+                </GroupBox>
+            </Grid>
 
-                    <Grid Margin="0,0,18,6" Grid.Row="2">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="180"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="Предмет:" FontWeight="Bold"/>
-                        <TextBox x:Name="SubjectBox" Grid.Column="1" IsReadOnly="True" BorderThickness="0" Background="Transparent"/>
+            <!-- Нижний ряд -->
+            <Grid Margin="0,0,0,12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <GroupBox Header="Расходы" Margin="0,0,12,0">
+                    <TextBlock x:Name="ExpensesBlock" Margin="8" Text="Нет данных"/>
+                </GroupBox>
+                <GroupBox Header="Склады" Grid.Column="1" Margin="0,0,12,0">
+                    <TextBlock x:Name="WarehousesBlock" Margin="8" Text="Нет данных"/>
+                </GroupBox>
+                <GroupBox Header="Фото" Grid.Column="2">
+                    <TextBlock x:Name="PhotosBlock" Margin="8" Text="Нет данных"/>
+                </GroupBox>
+            </Grid>
+
+            <!-- Графики -->
+            <Grid Margin="0,0,0,12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <GroupBox Header="Выручка по дням" Margin="0,0,12,0">
+                    <Grid Margin="8">
+                        <Canvas x:Name="RevenueChartCanvas" Height="180" Background="#FFF7F7F7">
+                            <Polyline x:Name="RevenueLine" Stroke="#FF2E77D0" StrokeThickness="2"/>
+                            <Polyline x:Name="OrdersLine" Stroke="#FF00A65A" StrokeThickness="2"/>
+                        </Canvas>
                     </Grid>
-
-                    <Grid Margin="0,0,18,6" Grid.Row="3">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="180"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="Артикул поставщика:" FontWeight="Bold"/>
-                        <TextBox x:Name="VendorCodeBox" Grid.Column="1" IsReadOnly="True" BorderThickness="0" Background="Transparent"/>
+                </GroupBox>
+                <GroupBox Header="Остатки по дням" Grid.Column="1">
+                    <Grid Margin="8">
+                        <Canvas x:Name="StockChartCanvas" Height="180" Background="#FFF7F7F7">
+                            <Polyline x:Name="StocksLine" Stroke="#FF8E44AD" StrokeThickness="2"/>
+                            <Polyline x:Name="SalesLine" Stroke="#FFF39C12" StrokeThickness="2"/>
+                        </Canvas>
                     </Grid>
+                </GroupBox>
+            </Grid>
 
-                    <Grid Margin="0,0,18,6" Grid.Row="4">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="180"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="Штрихкоды:" FontWeight="Bold"/>
-                        <TextBox x:Name="BarcodesBox" Grid.Column="1" IsReadOnly="True" BorderThickness="0" Background="Transparent" TextWrapping="Wrap"/>
-                    </Grid>
-
-                    <Grid Margin="0,0,18,6" Grid.Row="5">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="180"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="Архив:" FontWeight="Bold"/>
-                        <TextBox x:Name="ArchivedBox" Grid.Column="1" IsReadOnly="True" BorderThickness="0" Background="Transparent"/>
-                    </Grid>
-
-                    <Grid Margin="0,0,18,6" Grid.Row="6">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="180"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="Габариты упаковки (Д×Ш×В), см:" FontWeight="Bold"/>
-                        <TextBox x:Name="DimsBox" Grid.Column="1" IsReadOnly="True" BorderThickness="0" Background="Transparent"/>
-                    </Grid>
-
-                    <Grid Margin="0,0,18,6" Grid.Row="7">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="180"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="Вес с упаковкой, кг:" FontWeight="Bold"/>
-                        <TextBox x:Name="WeightBox" Grid.Column="1" IsReadOnly="True" BorderThickness="0" Background="Transparent"/>
-                    </Grid>
-
-                    <Grid Margin="0,0,18,6" Grid.Row="8">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="180"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="Объём, м³:" FontWeight="Bold"/>
-                        <TextBox x:Name="VolumeBox" Grid.Column="1" IsReadOnly="True" BorderThickness="0" Background="Transparent"/>
-                    </Grid>
-
-                    <Grid Margin="0,0,18,0" Grid.Row="9">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="180"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="Описание:" FontWeight="Bold"/>
-                        <TextBox x:Name="DescBox" Grid.Column="1" IsReadOnly="True" BorderThickness="0" Background="Transparent"
-                                 TextWrapping="Wrap" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" Height="260"/>
-                    </Grid>
-                </Grid>
-
-                <!-- Правая колонка -->
-                <GroupBox Header="Характеристики (attributes)" Grid.Column="1">
+            <!-- Детали -->
+            <TabControl>
+                <TabItem Header="Характеристики">
                     <DataGrid x:Name="CharGrid"
                               AutoGenerateColumns="False"
                               CanUserAddRows="False"
@@ -142,15 +189,63 @@
                             <DataGridTextColumn Header="Значение" Binding="{Binding Value}" Width="*"/>
                         </DataGrid.Columns>
                     </DataGrid>
-                </GroupBox>
-            </Grid>
-
-            <!-- Сырый JSON -->
-            <Expander Header="Показать исходный JSON карточки" Grid.Row="2" Margin="0,8,0,0">
-                <TextBox x:Name="RawJsonBox" FontFamily="Consolas" FontSize="12"
-                         TextWrapping="NoWrap" AcceptsReturn="True" VerticalScrollBarVisibility="Auto"
-                         HorizontalScrollBarVisibility="Auto" Height="320" IsReadOnly="True"/>
-            </Expander>
-        </Grid>
+                </TabItem>
+                <TabItem Header="Цены и скидки">
+                    <DataGrid x:Name="PricesGrid"
+                              AutoGenerateColumns="False"
+                              CanUserAddRows="False"
+                              CanUserDeleteRows="False"
+                              IsReadOnly="True">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Размер" Binding="{Binding Size}" Width="100"/>
+                            <DataGridTextColumn Header="Цена" Binding="{Binding Price}" Width="100"/>
+                            <DataGridTextColumn Header="Цена со скидкой" Binding="{Binding DiscountedPrice}" Width="130"/>
+                            <DataGridTextColumn Header="Клубная цена" Binding="{Binding ClubPrice}" Width="120"/>
+                            <DataGridTextColumn Header="Скидка продавца, %" Binding="{Binding SellerDiscount}" Width="130"/>
+                            <DataGridTextColumn Header="Скидка WB клуба, %" Binding="{Binding ClubDiscount}" Width="130"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </TabItem>
+                <TabItem Header="Акции">
+                    <DataGrid x:Name="PromotionsGrid"
+                              AutoGenerateColumns="False"
+                              CanUserAddRows="False"
+                              CanUserDeleteRows="False"
+                              IsReadOnly="True">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Акция" Binding="{Binding Name}" Width="180"/>
+                            <DataGridTextColumn Header="Требуемая скидка, %" Binding="{Binding RequiredDiscount}" Width="150"/>
+                            <DataGridTextColumn Header="Статус" Binding="{Binding Status}" Width="120"/>
+                            <DataGridTextColumn Header="Комментарий" Binding="{Binding Details}" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </TabItem>
+                <TabItem Header="Календарь">
+                    <DataGrid x:Name="CalendarPromotionsGrid"
+                              AutoGenerateColumns="False"
+                              CanUserAddRows="False"
+                              CanUserDeleteRows="False"
+                              IsReadOnly="True">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Акция" Binding="{Binding Name}" Width="180"/>
+                            <DataGridTextColumn Header="Дата с" Binding="{Binding DateFrom}" Width="140"/>
+                            <DataGridTextColumn Header="Дата по" Binding="{Binding DateTo}" Width="140"/>
+                            <DataGridTextColumn Header="Статус" Binding="{Binding Status}" Width="120"/>
+                            <DataGridTextColumn Header="Участие" Binding="{Binding Participation}" Width="120"/>
+                            <DataGridTextColumn Header="Комментарий" Binding="{Binding Details}" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </TabItem>
+                <TabItem Header="Описание">
+                    <TextBox x:Name="DescBox" TextWrapping="Wrap" AcceptsReturn="True" VerticalScrollBarVisibility="Auto"
+                             IsReadOnly="True"/>
+                </TabItem>
+                <TabItem Header="JSON">
+                    <TextBox x:Name="RawJsonBox" FontFamily="Consolas" FontSize="12"
+                             TextWrapping="NoWrap" AcceptsReturn="True" VerticalScrollBarVisibility="Auto"
+                             HorizontalScrollBarVisibility="Auto" Height="320" IsReadOnly="True"/>
+                </TabItem>
+            </TabControl>
+        </StackPanel>
     </ScrollViewer>
 </Page>
