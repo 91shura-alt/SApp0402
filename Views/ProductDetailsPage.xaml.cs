@@ -9,12 +9,14 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 
 namespace SellerOps.App.Views
 {
     public partial class ProductDetailsPage : Page
     {
         private readonly long _nmId;
+        private int _periodDays = 30;
 
         public ProductDetailsPage(long nmId)
         {
@@ -63,7 +65,7 @@ namespace SellerOps.App.Views
             try
             {
                 TitleBlock.Text = $"Карточка {_nmId}";
-                NmIdBox.Text = _nmId.ToString();
+                NmIdValue.Text = _nmId.ToString();
 
                 // 1) Пробуем WB details
                 WbCatalogService.WbCardDetails dto;
@@ -130,37 +132,19 @@ namespace SellerOps.App.Views
                     ? $"Карточка {_nmId}"
                     : dto.Title;
 
-                BrandBox.Text = dto.Brand ?? "";
-                SubjectBox.Text = dto.Subject ?? "";
-                VendorCodeBox.Text = dto.VendorCode ?? "";
+                SubjectValue.Text = dto.Subject ?? "";
+                VendorCodeValue.Text = dto.VendorCode ?? "";
 
                 var barcodes = dto.Barcodes ?? new List<string>();
-                BarcodesBox.Text = barcodes.Count > 0 ? string.Join(", ", barcodes) : "";
-
-                ArchivedBox.Text = dto.IsArchived ? "Да" : "Нет";
-
-                // размеры
-                if (dto.LengthCm.HasValue && dto.WidthCm.HasValue && dto.HeightCm.HasValue)
-                    DimsBox.Text = $"{dto.LengthCm.Value:0.##} × {dto.WidthCm.Value:0.##} × {dto.HeightCm.Value:0.##}";
-                else
-                    DimsBox.Text = "";
-
-                // вес
-                WeightBox.Text = dto.WeightKg.HasValue ? $"{dto.WeightKg.Value:0.###}" : "";
-
-                // объём
-                if (dto.LengthCm.HasValue && dto.WidthCm.HasValue && dto.HeightCm.HasValue)
-                {
-                    var v = (dto.LengthCm.Value * dto.WidthCm.Value * dto.HeightCm.Value) / 1_000_000.0;
-                    VolumeBox.Text = v.ToString("0.######");
-                }
-                else
-                {
-                    VolumeBox.Text = "";
-                }
+                BarcodesValue.Text = barcodes.Count > 0 ? string.Join(", ", barcodes) : "";
 
                 DescBox.Text = dto.Description ?? "";
                 RawJsonBox.Text = dto.RawJson ?? "";
+                CostValue.Text = p?.Cost.HasValue == true ? p.Cost.Value.ToString("0.##") : "н/д";
+                PrepValue.Text = "н/д";
+                RatingValue.Text = "н/д";
+                ReviewsValue.Text = "н/д";
+                LinksValue.Text = $"https://www.wildberries.ru/catalog/{_nmId}/detail.aspx";
 
                 // характеристики
                 var rows = (dto.Characteristics ?? new List<WbCatalogService.WbCardDetails.CharDto>())
@@ -177,6 +161,7 @@ namespace SellerOps.App.Views
                 await LoadPricesAsync();
                 await LoadPromotionsAsync();
                 await LoadCalendarPromotionsAsync();
+                await LoadDashboardStatsAsync();
             }
             catch (Exception ex)
             {
@@ -238,6 +223,10 @@ namespace SellerOps.App.Views
             }
 
             PricesGrid.ItemsSource = rows;
+
+            var firstSize = sizes.FirstOrDefault();
+            PriceNoDiscountValue.Text = FormatMoney(firstSize?.Price);
+            PriceWithDiscountValue.Text = FormatMoney(firstSize?.DiscountedPrice);
         }
 
         private async Task LoadPromotionsAsync()
@@ -362,6 +351,113 @@ namespace SellerOps.App.Views
             CalendarPromotionsGrid.ItemsSource = rows;
         }
 
+        private async Task LoadDashboardStatsAsync()
+        {
+            var db = AppDbContext.Instance;
+            var to = DateTime.UtcNow;
+            var from = to.AddDays(-_periodDays);
+
+            var realizations = await db.WbRealizationLines.AsNoTracking()
+                .Where(x => x.NmId == _nmId && x.RrDt.HasValue && x.RrDt.Value >= from && x.RrDt.Value <= to)
+                .ToListAsync();
+
+            var salesLines = realizations.Where(x => !IsReturn(x)).ToList();
+            var returnLines = realizations.Where(IsReturn).ToList();
+
+            var ordersQty = realizations.Sum(x => x.Quantity);
+            var salesQty = salesLines.Sum(x => x.Quantity);
+            var returnQty = returnLines.Sum(x => x.Quantity);
+            OrdersValue.Text = ordersQty.ToString();
+            SalesValue.Text = salesQty.ToString();
+            ReturnsValue.Text = returnQty.ToString();
+
+            var buyout = ordersQty > 0 ? (decimal)salesQty / ordersQty * 100m : 0m;
+            BuyoutValue.Text = ordersQty > 0 ? $"{buyout:0.##}%" : "н/д";
+
+            var salesDays = salesLines
+                .Where(x => x.SaleDt.HasValue || x.RrDt.HasValue)
+                .Select(x => (x.SaleDt ?? x.RrDt)!.Value.Date)
+                .Distinct()
+                .Count();
+            SalesDaysValue.Text = salesDays.ToString();
+
+            var revenue = salesLines.Sum(x => x.PriceWithDiscRub);
+            RevenueValue.Text = revenue.ToString("0.##");
+
+            var expenses = realizations.Sum(x => x.PpvzSalesCommission + x.DeliveryRub + x.StorageFee + x.Deduction + x.Penalty);
+            ExpensesValue.Text = expenses.ToString("0.##");
+
+            var profit = revenue - expenses;
+            ProfitValue.Text = profit.ToString("0.##");
+
+            var margin = revenue > 0 ? profit / revenue * 100m : 0m;
+            MarginValue.Text = revenue > 0 ? $"{margin:0.##}%" : "н/д";
+
+            var cost = await db.WbProducts.AsNoTracking()
+                .Where(x => x.NmId == _nmId)
+                .Select(x => x.Cost)
+                .FirstOrDefaultAsync();
+            var totalCost = cost.HasValue ? cost.Value * salesQty : 0m;
+            var roi = totalCost > 0 ? profit / totalCost * 100m : 0m;
+            RoiValue.Text = totalCost > 0 ? $"{roi:0.##}%" : "н/д";
+
+            ExpensesBlock.Text = expenses > 0 ? $"Комиссия+логистика: {expenses:0.##}" : "Нет данных";
+
+            var latestStockDate = await db.WbStockSnapshots.AsNoTracking()
+                .Where(x => x.NmId == _nmId)
+                .MaxAsync(x => (DateTime?)x.SnapshotAt);
+
+            if (latestStockDate.HasValue)
+            {
+                var stocks = await db.WbStockSnapshots.AsNoTracking()
+                    .Where(x => x.NmId == _nmId && x.SnapshotAt == latestStockDate.Value)
+                    .OrderByDescending(x => x.Quantity)
+                    .ToListAsync();
+
+                WarehousesBlock.Text = stocks.Count == 0
+                    ? "Нет данных"
+                    : string.Join(Environment.NewLine, stocks.Take(5).Select(x => $"{x.Warehouse}: {x.Quantity}"));
+            }
+            else
+            {
+                WarehousesBlock.Text = "Нет данных";
+            }
+
+            PhotosBlock.Text = "Нет данных";
+
+            var revenueSeries = salesLines
+                .Where(x => x.RrDt.HasValue)
+                .GroupBy(x => x.RrDt!.Value.Date)
+                .OrderBy(x => x.Key)
+                .Select(x => x.Sum(v => v.PriceWithDiscRub))
+                .ToList();
+
+            var ordersSeries = salesLines
+                .Where(x => x.RrDt.HasValue)
+                .GroupBy(x => x.RrDt!.Value.Date)
+                .OrderBy(x => x.Key)
+                .Select(x => (decimal)x.Sum(v => v.Quantity))
+                .ToList();
+
+            var stockSeries = await db.WbStockSnapshots.AsNoTracking()
+                .Where(x => x.NmId == _nmId && x.SnapshotAt >= from && x.SnapshotAt <= to)
+                .GroupBy(x => x.SnapshotAt.Date)
+                .OrderBy(x => x.Key)
+                .Select(x => (decimal)x.Sum(v => v.Quantity))
+                .ToListAsync();
+
+            var salesSeries = salesLines
+                .Where(x => x.RrDt.HasValue)
+                .GroupBy(x => x.RrDt!.Value.Date)
+                .OrderBy(x => x.Key)
+                .Select(x => (decimal)x.Sum(v => v.Quantity))
+                .ToList();
+
+            SetChart(RevenueChartCanvas, RevenueLine, OrdersLine, revenueSeries, ordersSeries);
+            SetChart(StockChartCanvas, StocksLine, SalesLine, stockSeries, salesSeries);
+            TrendValue.Text = BuildTrendText(revenueSeries);
+        }
+
         private static string? TryExtractDescriptionFromRawJson(string? rawJson)
         {
             if (string.IsNullOrWhiteSpace(rawJson))
@@ -398,6 +494,74 @@ namespace SellerOps.App.Views
         {
             if (NavigationService?.CanGoBack == true)
                 NavigationService.GoBack();
+        }
+
+        private async void Refresh_Click(object sender, RoutedEventArgs e)
+        {
+            await LoadAsync();
+        }
+
+        private async void PeriodCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (PeriodCombo.SelectedItem is ComboBoxItem item && int.TryParse(item.Tag?.ToString(), out var days))
+            {
+                _periodDays = days > 0 ? days : 30;
+                await LoadAsync();
+            }
+        }
+
+        private static bool IsReturn(WbRealizationLine line)
+        {
+            return (line.SupplierOperName?.IndexOf("возврат", StringComparison.OrdinalIgnoreCase) ?? -1) >= 0
+                || (line.DocTypeName?.IndexOf("возврат", StringComparison.OrdinalIgnoreCase) ?? -1) >= 0;
+        }
+
+        private static void SetChart(Canvas canvas, Polyline line1, Polyline line2, List<decimal> series1, List<decimal> series2)
+        {
+            var width = canvas.ActualWidth > 0 ? canvas.ActualWidth : 600;
+            var height = canvas.ActualHeight > 0 ? canvas.ActualHeight : 180;
+
+            line1.Points = BuildPoints(series1, width, height);
+            line2.Points = BuildPoints(series2, width, height);
+        }
+
+        private static PointCollection BuildPoints(List<decimal> values, double width, double height)
+        {
+            var points = new PointCollection();
+            if (values.Count == 0)
+                return points;
+
+            var max = values.Max();
+            var min = values.Min();
+            var range = max - min;
+            if (range == 0)
+                range = 1;
+
+            var step = values.Count > 1 ? width / (values.Count - 1) : width;
+            for (int i = 0; i < values.Count; i++)
+            {
+                var x = i * step;
+                var normalized = (values[i] - min) / range;
+                var y = height - (double)(normalized * (decimal)height);
+                points.Add(new System.Windows.Point(x, y));
+            }
+
+            return points;
+        }
+
+        private static string BuildTrendText(List<decimal> series)
+        {
+            if (series.Count < 4)
+                return "н/д";
+
+            var half = series.Count / 2;
+            var first = series.Take(half).Sum();
+            var second = series.Skip(half).Sum();
+            if (first == 0)
+                return "н/д";
+
+            var delta = (second - first) / first * 100m;
+            return delta >= 0 ? $"↑ {delta:0.##}%" : $"↓ {Math.Abs(delta):0.##}%";
         }
     }
 }
