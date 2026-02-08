@@ -6,9 +6,14 @@ namespace SellerOps.App.Services
 {
     public static class SecureStorage
     {
+        private const string DpapiPrefix = "AQAAANCMnd8";
+
         public static string Protect(string plainText)
         {
             if (string.IsNullOrWhiteSpace(plainText))
+                return plainText;
+
+            if (AppSettings.Instance.StoreTokensAsPlainText)
                 return plainText;
 
             try
@@ -29,10 +34,12 @@ namespace SellerOps.App.Services
             }
         }
 
-        public static string Unprotect(string encryptedText)
+        public static bool TryUnprotect(string? encryptedText, out string? plainText)
         {
+            plainText = null;
+
             if (string.IsNullOrWhiteSpace(encryptedText))
-                return encryptedText;
+                return false;
 
             try
             {
@@ -43,15 +50,40 @@ namespace SellerOps.App.Services
                     DataProtectionScope.CurrentUser
                 );
 
-                return Encoding.UTF8.GetString(decrypted);
+                plainText = Encoding.UTF8.GetString(decrypted);
+                return true;
+            }
+            catch (FormatException)
+            {
+                // Старая версия могла сохранить токен без шифрования.
+                plainText = encryptedText;
+                return true;
+            }
+            catch (CryptographicException)
+            {
+                if (encryptedText.StartsWith(DpapiPrefix, StringComparison.Ordinal))
+                    return false;
+
+                // На всякий случай — если строка не DPAPI, вернём как есть.
+                plainText = encryptedText;
+                return true;
             }
             catch
             {
-                // 1) Токен мог быть сохранён в старой версии без шифрования
-                // 2) Или БД перенесли на другой ПК/пользователя, и DPAPI не может расшифровать
-                // В любом случае не падаем — просто вернём исходную строку.
-                return encryptedText;
+                return false;
             }
+        }
+
+        public static string Unprotect(string encryptedText)
+        {
+            if (string.IsNullOrWhiteSpace(encryptedText))
+                return encryptedText;
+
+            if (TryUnprotect(encryptedText, out var plainText) && !string.IsNullOrWhiteSpace(plainText))
+                return plainText;
+
+            // В крайнем случае возвращаем как есть (чтобы приложение не падало).
+            return encryptedText;
         }
     }
 }
