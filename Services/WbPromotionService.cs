@@ -136,31 +136,32 @@ namespace SellerOps.App.Services
             var promotionName = BuildPromotionNameFromFile(path);
 
             var headers = BuildHeaderMap(ws);
-            var requiredHeaders = new[]
-            {
-                "Артикул WB",
-                "Загружаемая скидка для участия в акции, %",
-                "Плановая цена для акции",
-                "Текущая розничная цена",
-                "Текущая скидка сайта, %",
-                "Товар уже участвует в акции",
-                "Статус"
-            };
+            var colNmId = FindHeaderIndex(headers, "артикул wb", "артикул wb (nm)");
+            var colRequiredDiscount = FindHeaderIndex(headers,
+                "загружаемая скидка для участия в акции, %",
+                "загружаемая скидка",
+                "загружаемая скидка, %",
+                "загружаемая скидка для участия в акции");
+            var colPlanPrice = FindHeaderIndex(headers, "плановая цена для акции", "плановая цена");
+            var colCurrentPrice = FindHeaderIndex(headers, "текущая розничная цена", "текущая цена");
+            var colCurrentSiteDiscount = FindHeaderIndex(headers,
+                "текущая скидка сайта, %",
+                "текущая скидка сайта",
+                "текущая скидка, %");
+            var colParticipates = FindHeaderIndex(headers, "товар уже участвует в акции", "товар уже участвует");
+            var colStatus = FindHeaderIndex(headers, "статус", "статус акции");
 
-            var missing = requiredHeaders
-                .Where(h => !headers.ContainsKey(NormalizeHeader(h)))
-                .ToList();
+            var missing = new List<string>();
+            if (colNmId == null) missing.Add("Артикул WB");
+            if (colRequiredDiscount == null) missing.Add("Загружаемая скидка для участия в акции, %");
+            if (colPlanPrice == null) missing.Add("Плановая цена для акции");
+            if (colCurrentPrice == null) missing.Add("Текущая розничная цена");
+            if (colCurrentSiteDiscount == null) missing.Add("Текущая скидка сайта, %");
+            if (colParticipates == null) missing.Add("Товар уже участвует в акции");
+            if (colStatus == null) missing.Add("Статус");
 
             if (missing.Count > 0)
                 throw new InvalidOperationException($"В Excel не найдены колонки: {string.Join(", ", missing)}");
-
-            var colNmId = headers[NormalizeHeader("Артикул WB")];
-            var colRequiredDiscount = headers[NormalizeHeader("Загружаемая скидка для участия в акции, %")];
-            var colPlanPrice = headers[NormalizeHeader("Плановая цена для акции")];
-            var colCurrentPrice = headers[NormalizeHeader("Текущая розничная цена")];
-            var colCurrentSiteDiscount = headers[NormalizeHeader("Текущая скидка сайта, %")];
-            var colParticipates = headers[NormalizeHeader("Товар уже участвует в акции")];
-            var colStatus = headers[NormalizeHeader("Статус")];
 
             var importedAt = DateTime.UtcNow;
             var errors = new List<string>();
@@ -178,7 +179,7 @@ namespace SellerOps.App.Services
             {
                 ct.ThrowIfCancellationRequested();
 
-                var nmCell = ws.Cell(row, colNmId);
+                var nmCell = ws.Cell(row, colNmId!.Value);
                 if (nmCell.IsEmpty() && string.IsNullOrWhiteSpace(nmCell.GetString()))
                     break;
 
@@ -190,12 +191,12 @@ namespace SellerOps.App.Services
                     continue;
                 }
 
-                var requiredDiscount = NormalizePercent(GetCellString(ws.Cell(row, colRequiredDiscount)));
-                var planPrice = GetCellString(ws.Cell(row, colPlanPrice));
-                var currentPrice = GetCellString(ws.Cell(row, colCurrentPrice));
-                var currentSiteDiscount = NormalizePercent(GetCellString(ws.Cell(row, colCurrentSiteDiscount)));
-                var participatesRaw = GetCellString(ws.Cell(row, colParticipates));
-                var status = GetCellString(ws.Cell(row, colStatus));
+                var requiredDiscount = NormalizePercent(GetCellString(ws.Cell(row, colRequiredDiscount!.Value)));
+                var planPrice = GetCellString(ws.Cell(row, colPlanPrice!.Value));
+                var currentPrice = GetCellString(ws.Cell(row, colCurrentPrice!.Value));
+                var currentSiteDiscount = NormalizePercent(GetCellString(ws.Cell(row, colCurrentSiteDiscount!.Value)));
+                var participatesRaw = GetCellString(ws.Cell(row, colParticipates!.Value));
+                var status = GetCellString(ws.Cell(row, colStatus!.Value));
 
                 var inAction = IsTrueValue(participatesRaw);
                 var details = $"planPrice={planPrice}; currentPrice={currentPrice}; currentSiteDiscount={currentSiteDiscount}; wbStatus={status}";
@@ -884,6 +885,26 @@ namespace SellerOps.App.Services
             var normalized = header.Replace('\u00A0', ' ').Trim();
             var parts = normalized.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
             return string.Join(' ', parts).ToLowerInvariant();
+        }
+
+        private static int? FindHeaderIndex(Dictionary<string, int> headers, params string[] candidates)
+        {
+            foreach (var candidate in candidates)
+            {
+                var normalized = NormalizeHeader(candidate);
+                if (headers.TryGetValue(normalized, out var col))
+                    return col;
+            }
+
+            foreach (var candidate in candidates)
+            {
+                var normalized = NormalizeHeader(candidate);
+                var match = headers.FirstOrDefault(h => h.Key.Contains(normalized, StringComparison.OrdinalIgnoreCase));
+                if (!string.IsNullOrEmpty(match.Key))
+                    return match.Value;
+            }
+
+            return null;
         }
 
         private static string GetCellString(IXLCell cell)
