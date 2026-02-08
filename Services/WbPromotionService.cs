@@ -3,6 +3,7 @@ using SellerOps.App.Data;
 using SellerOps.App.Domain;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
@@ -286,8 +287,8 @@ namespace SellerOps.App.Services
 
         private static (string start, string end) GetCalendarRange()
         {
-            var start = DateTime.UtcNow.AddDays(-1);
-            var end = DateTime.UtcNow.AddDays(60);
+            var start = DateTime.UtcNow.AddHours(-3);
+            var end = DateTime.UtcNow.AddDays(30);
             return (start.ToString("yyyy-MM-ddTHH:mm:ssZ"), end.ToString("yyyy-MM-ddTHH:mm:ssZ"));
         }
 
@@ -297,7 +298,7 @@ namespace SellerOps.App.Services
             var start = Uri.EscapeDataString(startDateTime);
             var end = Uri.EscapeDataString(endDateTime);
 
-            return $"/api/v1/calendar/promotions?startDateTime={start}&endDateTime={end}&allPromo=true&limit={limit}&offset={offset}";
+            return $"/api/v1/calendar/promotions?startDateTime={start}&endDateTime={end}&allPromo=false&limit={limit}&offset={offset}";
         }
 
         private static string BuildCalendarNomenclaturesUrl(long promotionId, bool inAction, int limit, int offset)
@@ -360,6 +361,10 @@ namespace SellerOps.App.Services
             var promotions = await LoadCalendarPromotionsAsync(baseUrl, token, ct);
             var result = new List<WbPromotionItem>();
             var seenPromotions = new HashSet<long>();
+            var sizePrices = await _db.WbPriceSizes.AsNoTracking()
+                .Where(x => x.NmId == nmId && x.Price.HasValue)
+                .Select(x => x.Price!.Value)
+                .ToListAsync(ct);
 
             foreach (var promo in promotions)
             {
@@ -373,13 +378,18 @@ namespace SellerOps.App.Services
                 if (found == null)
                     continue;
 
+                var details = $"price={found.Price}; planPrice={found.PlanPrice}; currentDiscount={found.Discount}; planDiscount={found.PlanDiscount}";
+                var targetPriceInfo = BuildTargetPriceInfo(found, sizePrices);
+                if (!string.IsNullOrWhiteSpace(targetPriceInfo))
+                    details = $"{details}; {targetPriceInfo}";
+
                 result.Add(new WbPromotionItem
                 {
                     PromotionId = promo.Id,
                     Name = promo.Name,
                     RequiredDiscount = found.PlanDiscount,
                     Status = found.InAction ? "Участвует" : "Не участвует",
-                    Details = $"price={found.Price}; planPrice={found.PlanPrice}; currentDiscount={found.Discount}; planDiscount={found.PlanDiscount}"
+                    Details = details
                 });
             }
 
@@ -388,14 +398,14 @@ namespace SellerOps.App.Services
 
         private async Task<NomenclatureInfo?> TryLoadNomenclatureAsync(string baseUrl, string token, long promotionId, long nmId, CancellationToken ct)
         {
-            var found = await TryFindNomenclatureAsync(baseUrl, token, promotionId, nmId, true, ct);
+            var found = await FindNomenclaturePagedAsync(baseUrl, token, promotionId, nmId, true, ct);
             if (found != null)
                 return found;
 
-            return await TryFindNomenclatureAsync(baseUrl, token, promotionId, nmId, false, ct);
+            return await FindNomenclaturePagedAsync(baseUrl, token, promotionId, nmId, false, ct);
         }
 
-        private async Task<NomenclatureInfo?> TryFindNomenclatureAsync(string baseUrl, string token, long promotionId, long nmId, bool inAction, CancellationToken ct)
+        private async Task<NomenclatureInfo?> FindNomenclaturePagedAsync(string baseUrl, string token, long promotionId, long nmId, bool inAction, CancellationToken ct)
         {
             var offset = 0;
 
@@ -574,6 +584,7 @@ namespace SellerOps.App.Services
         private static List<CalendarPromotion> ParseCalendarPromotionsPage(string payload)
         {
             var result = new List<CalendarPromotion>();
+            var seenIds = new HashSet<long>();
 
             try
             {
@@ -586,7 +597,7 @@ namespace SellerOps.App.Services
                     foreach (var item in promotions.EnumerateArray())
                     {
                         var promotion = ParsePromotion(item);
-                        if (promotion != null)
+                        if (promotion != null && seenIds.Add(promotion.Id))
                             result.Add(promotion);
                     }
                 }
@@ -688,6 +699,44 @@ namespace SellerOps.App.Services
                 return "";
 
             return value.ValueKind == JsonValueKind.String ? value.GetString() ?? "" : value.ToString();
+        }
+
+        private static string BuildTargetPriceInfo(NomenclatureInfo info, List<decimal> sizePrices)
+        {
+            if (!TryParsePercent(info.PlanDiscount, out var percent))
+                return "";
+
+            if (sizePrices.Count == 0)
+            {
+                if (string.IsNullOrWhiteSpace(info.PlanPrice))
+                    return "";
+
+                return $"targetPrice={info.PlanPrice}";
+            }
+
+            var multiplier = (100m - percent) / 100m;
+            var targets = sizePrices.Select(price => price * multiplier).ToList();
+            var min = targets.Min();
+            var max = targets.Max();
+            if (min == max)
+                return $"targetPrice≈{min:0.##}";
+
+            return $"targetPrice≈{min:0.##}-{max:0.##}";
+        }
+
+        private static bool TryParsePercent(string value, out decimal percent)
+        {
+            percent = 0m;
+            if (string.IsNullOrWhiteSpace(value))
+                return false;
+
+            var cleaned = value.Replace("%", "").Trim();
+            if (decimal.TryParse(cleaned, NumberStyles.Any, CultureInfo.InvariantCulture, out percent))
+                return true;
+            if (decimal.TryParse(cleaned, NumberStyles.Any, CultureInfo.CurrentCulture, out percent))
+                return true;
+
+            return false;
         }
 
         private static long? ParseLong(JsonElement element)

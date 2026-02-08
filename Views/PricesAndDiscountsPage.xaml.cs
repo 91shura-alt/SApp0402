@@ -112,14 +112,20 @@ namespace SellerOps.App.Views
                 if (long.TryParse(s, out var nm))
                 {
                     q = q.Where(x => x.NmId == nm).OrderByDescending(x => x.ImportedAtUtc);
+                    GoodsGrid.ItemsSource = await q.Take(5000).ToListAsync();
                 }
                 else
                 {
-                    q = q.Where(x => x.VendorCode.Contains(s)).OrderByDescending(x => x.ImportedAtUtc);
+                    var goods = await q.Take(5000).ToListAsync();
+                    GoodsGrid.ItemsSource = goods
+                        .Where(x => x.VendorCode.Contains(s, StringComparison.OrdinalIgnoreCase))
+                        .ToList();
                 }
             }
-
-            GoodsGrid.ItemsSource = await q.Take(5000).ToListAsync();
+            else
+            {
+                GoodsGrid.ItemsSource = await q.Take(5000).ToListAsync();
+            }
 
             SizesGrid.ItemsSource = null;
         }
