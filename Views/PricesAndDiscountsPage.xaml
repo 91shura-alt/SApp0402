@@ -33,49 +33,83 @@
         </Grid>
 
         <!-- Content -->
-        <Grid Grid.Row="2">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="3*"/>
-                <ColumnDefinition Width="2*"/>
-            </Grid.ColumnDefinitions>
+        <TabControl Grid.Row="2">
+            <TabItem Header="Товары и размеры">
+                <Grid Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="3*"/>
+                        <ColumnDefinition Width="2*"/>
+                    </Grid.ColumnDefinitions>
 
-            <!-- Goods -->
-            <GroupBox Header="Товары (listGoods)" Grid.Column="0" Margin="0,0,10,0">
-                <DataGrid x:Name="GoodsGrid"
-                          AutoGenerateColumns="False"
-                          CanUserAddRows="False"
-                          CanUserDeleteRows="False"
-                          IsReadOnly="True"
-                          SelectionMode="Single"
-                          SelectionChanged="GoodsGrid_SelectionChanged">
-                    <DataGrid.Columns>
-                        <DataGridTextColumn Header="nmID" Binding="{Binding NmId}" Width="110"/>
-                        <DataGridTextColumn Header="vendorCode" Binding="{Binding VendorCode}" Width="*"/>
-                        <DataGridTextColumn Header="discount, %" Binding="{Binding Discount}" Width="110"/>
-                        <DataGridTextColumn Header="club, %" Binding="{Binding ClubDiscount}" Width="90"/>
-                        <DataGridTextColumn Header="editableSize" Binding="{Binding EditableSizePrice}" Width="120"/>
-                        <DataGridTextColumn Header="badTurnover" Binding="{Binding IsBadTurnover}" Width="120"/>
-                        <DataGridTextColumn Header="imported" Binding="{Binding ImportedAtUtc}" Width="170"/>
-                    </DataGrid.Columns>
-                </DataGrid>
-            </GroupBox>
+                    <!-- Goods -->
+                    <GroupBox Header="Товары (listGoods)" Grid.Column="0" Margin="0,0,10,0">
+                        <DataGrid x:Name="GoodsGrid"
+                                  AutoGenerateColumns="False"
+                                  CanUserAddRows="False"
+                                  CanUserDeleteRows="False"
+                                  IsReadOnly="True"
+                                  SelectionMode="Single"
+                                  SelectionChanged="GoodsGrid_SelectionChanged">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="nmID" Binding="{Binding NmId}" Width="110"/>
+                                <DataGridTextColumn Header="vendorCode" Binding="{Binding VendorCode}" Width="*"/>
+                                <DataGridTextColumn Header="discount, %" Binding="{Binding Discount}" Width="110"/>
+                                <DataGridTextColumn Header="club, %" Binding="{Binding ClubDiscount}" Width="90"/>
+                                <DataGridTextColumn Header="editableSize" Binding="{Binding EditableSizePrice}" Width="120"/>
+                                <DataGridTextColumn Header="badTurnover" Binding="{Binding IsBadTurnover}" Width="120"/>
+                                <DataGridTextColumn Header="imported" Binding="{Binding ImportedAtUtc}" Width="170"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </GroupBox>
 
-            <!-- Sizes -->
-            <GroupBox Header="Размеры (sizes)" Grid.Column="1">
-                <DataGrid x:Name="SizesGrid"
-                          AutoGenerateColumns="False"
-                          CanUserAddRows="False"
-                          CanUserDeleteRows="False"
-                          IsReadOnly="True">
-                    <DataGrid.Columns>
-                        <DataGridTextColumn Header="sizeID" Binding="{Binding SizeId}" Width="90"/>
-                        <DataGridTextColumn Header="techSize" Binding="{Binding TechSizeName}" Width="*"/>
-                        <DataGridTextColumn Header="price" Binding="{Binding Price}" Width="100"/>
-                        <DataGridTextColumn Header="discounted" Binding="{Binding DiscountedPrice}" Width="110"/>
-                        <DataGridTextColumn Header="clubDiscounted" Binding="{Binding ClubDiscountedPrice}" Width="130"/>
-                    </DataGrid.Columns>
-                </DataGrid>
-            </GroupBox>
-        </Grid>
+                    <!-- Sizes -->
+                    <GroupBox Header="Размеры (sizes)" Grid.Column="1">
+                        <DataGrid x:Name="SizesGrid"
+                                  AutoGenerateColumns="False"
+                                  CanUserAddRows="False"
+                                  CanUserDeleteRows="False"
+                                  IsReadOnly="True">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="sizeID" Binding="{Binding SizeId}" Width="90"/>
+                                <DataGridTextColumn Header="techSize" Binding="{Binding TechSizeName}" Width="*"/>
+                                <DataGridTextColumn Header="price" Binding="{Binding Price}" Width="100"/>
+                                <DataGridTextColumn Header="discounted" Binding="{Binding DiscountedPrice}" Width="110"/>
+                                <DataGridTextColumn Header="clubDiscounted" Binding="{Binding ClubDiscountedPrice}" Width="130"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </GroupBox>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Календарь акций WB">
+                <Grid Margin="0,8,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <Button x:Name="CalendarRefreshButton" Content="Обновить календарь" Click="CalendarRefresh_Click" Padding="12,6" Margin="0,0,10,0"/>
+                        <Button x:Name="AutoPromotionImportButton" Content="Импорт Excel автоакции (WB)" Click="AutoPromotionImport_Click" Padding="12,6" Margin="0,0,10,0"/>
+                        <TextBlock Text="Выберите товар на вкладке «Товары и размеры», чтобы увидеть акции." VerticalAlignment="Center" Foreground="Gray"/>
+                    </StackPanel>
+
+                    <DataGrid x:Name="CalendarPromotionsGrid" Grid.Row="1"
+                              AutoGenerateColumns="False"
+                              CanUserAddRows="False"
+                              CanUserDeleteRows="False"
+                              IsReadOnly="True">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Акция" Binding="{Binding Name}" Width="220"/>
+                            <DataGridTextColumn Header="Дата с" Binding="{Binding DateFrom}" Width="140"/>
+                            <DataGridTextColumn Header="Дата по" Binding="{Binding DateTo}" Width="140"/>
+                            <DataGridTextColumn Header="Статус" Binding="{Binding Status}" Width="120"/>
+                            <DataGridTextColumn Header="Участие" Binding="{Binding Participation}" Width="120"/>
+                            <DataGridTextColumn Header="Комментарий" Binding="{Binding Details}" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </TabItem>
+        </TabControl>
     </Grid>
 </Page>

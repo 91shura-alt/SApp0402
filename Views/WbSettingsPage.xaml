@@ -32,6 +32,20 @@
                        Visibility="Collapsed"
                        Text="Внимание: путь внутри облачного диска. Не запускайте приложение одновременно на двух ПК."/>
 
+            <TextBlock Text="Период по умолчанию (дней)" Margin="0,0,0,4"/>
+            <TextBox x:Name="DefaultPeriodDaysBox" Margin="0,0,0,16" TextChanged="DefaultPeriodDaysBox_TextChanged"/>
+
+            <CheckBox x:Name="PlainTokensBox"
+                      Content="Хранить токены без шифрования (для работы на двух ПК)"
+                      Margin="0,0,0,8"
+                      Checked="PlainTokensBox_Toggled"
+                      Unchecked="PlainTokensBox_Toggled"/>
+
+            <TextBlock Text="Режим без шифрования позволяет переносить токены между ПК, но снижает безопасность."
+                       Foreground="Gray"
+                       TextWrapping="Wrap"
+                       Margin="0,0,0,16"/>
+
             <TextBlock Text="Токены WB API" FontSize="22" FontWeight="Bold" Margin="0,0,0,16"/>
 
             <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
