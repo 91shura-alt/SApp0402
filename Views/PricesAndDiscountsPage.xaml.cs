@@ -15,9 +15,11 @@ namespace SellerOps.App.Views
     {
         private readonly AppDbContext _db = AppDbContext.Instance;
         private readonly WbPricesAndDiscountsService _svc = new WbPricesAndDiscountsService(AppDbContext.Instance);
+        private readonly WbPromotionService _promoSvc = new WbPromotionService(AppDbContext.Instance);
 
         private CancellationTokenSource? _cts;
         private string _search = "";
+        private long? _selectedNmId;
 
         public PricesAndDiscountsPage()
         {
@@ -133,9 +135,17 @@ namespace SellerOps.App.Views
         private async void GoodsGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (GoodsGrid.SelectedItem is WbPriceGood g)
+            {
+                _selectedNmId = g.NmId;
                 await ReloadSizesAsync(g.NmId);
+                await ReloadCalendarAsync(g.NmId, allowRefresh: false);
+            }
             else
+            {
+                _selectedNmId = null;
                 SizesGrid.ItemsSource = null;
+                CalendarPromotionsGrid.ItemsSource = null;
+            }
         }
 
         private async void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -150,6 +160,64 @@ namespace SellerOps.App.Views
             RefreshButton.Content = busy ? "Отменить" : "Обновить из WB";
             QuarantineButton.IsEnabled = !busy;
             SearchBox.IsEnabled = !busy;
+            CalendarRefreshButton.IsEnabled = !busy;
+        }
+
+        private async void CalendarRefresh_Click(object sender, RoutedEventArgs e)
+        {
+            if (_cts != null)
+            {
+                _cts.Cancel();
+                return;
+            }
+
+            if (!_selectedNmId.HasValue)
+            {
+                MessageBox.Show("Выберите товар, чтобы обновить календарь акций.", "Календарь акций", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            _cts = new CancellationTokenSource();
+            try
+            {
+                SetBusy(true, "Загрузка календаря акций...");
+                _db.EnsureUpgrade();
+
+                await _promoSvc.RefreshCalendarPromotionsForNmIdAsync(_selectedNmId.Value, _cts.Token);
+                await ReloadCalendarAsync(_selectedNmId.Value, allowRefresh: false);
+                SetBusy(false, "Календарь акций обновлён");
+            }
+            catch (OperationCanceledException)
+            {
+                SetBusy(false, "Отменено");
+            }
+            catch (Exception ex)
+            {
+                SetBusy(false, "Ошибка");
+                MessageBox.Show(ex.Message, "Календарь акций", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                _cts.Dispose();
+                _cts = null;
+            }
+        }
+
+        private async Task ReloadCalendarAsync(long nmId, bool allowRefresh)
+        {
+            DateTime? latestTs = await _db.WbPromotionCalendarItems.AsNoTracking()
+                .Where(x => x.NmId == nmId)
+                .MaxAsync(x => (DateTime?)x.ImportedAtUtc);
+
+            if (allowRefresh && (!latestTs.HasValue || DateTime.UtcNow - latestTs.Value > TimeSpan.FromHours(6)))
+            {
+                await _promoSvc.RefreshCalendarPromotionsForNmIdAsync(nmId);
+            }
+
+            CalendarPromotionsGrid.ItemsSource = await _db.WbPromotionCalendarItems.AsNoTracking()
+                .Where(x => x.NmId == nmId)
+                .OrderByDescending(x => x.ImportedAtUtc)
+                .ToListAsync();
         }
     }
 }
