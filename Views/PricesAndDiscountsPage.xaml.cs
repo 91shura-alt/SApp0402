@@ -167,6 +167,60 @@ namespace SellerOps.App.Views
             QuarantineButton.IsEnabled = !busy;
             SearchBox.IsEnabled = !busy;
             CalendarRefreshButton.IsEnabled = !busy;
+            AutoPromotionImportButton.IsEnabled = !busy;
+        }
+
+        private async void AutoPromotionImport_Click(object sender, RoutedEventArgs e)
+        {
+            if (_cts != null)
+            {
+                MessageBox.Show("Дождитесь завершения текущей операции.", "Импорт автоакции", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            var ofd = new Microsoft.Win32.OpenFileDialog
+            {
+                Filter = "Excel (*.xlsx)|*.xlsx",
+                Multiselect = false
+            };
+
+            if (ofd.ShowDialog() != true)
+                return;
+
+            _cts = new CancellationTokenSource();
+            try
+            {
+                SetBusy(true, "Импорт Excel автоакции...");
+                _db.EnsureUpgrade();
+
+                var result = await _promoSvc.ImportAutoPromotionExcelAsync(ofd.FileName, _cts.Token);
+                var message = $"{result.PromotionName}: импортировано {result.Imported}, пропусков {result.Skipped}.";
+
+                if (result.Errors.Count > 0)
+                {
+                    var errors = string.Join(Environment.NewLine, result.Errors.Take(10));
+                    if (result.Errors.Count > 10)
+                        errors += $"{Environment.NewLine}... всего ошибок: {result.Errors.Count}";
+                    message += $"{Environment.NewLine}{Environment.NewLine}{errors}";
+                }
+
+                SetBusy(false, "Импорт завершён");
+                MessageBox.Show(message, "Импорт автоакции", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (OperationCanceledException)
+            {
+                SetBusy(false, "Отменено");
+            }
+            catch (Exception ex)
+            {
+                SetBusy(false, "Ошибка");
+                MessageBox.Show(ex.Message, "Импорт автоакции", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                _cts.Dispose();
+                _cts = null;
+            }
         }
 
         private async void CalendarRefresh_Click(object sender, RoutedEventArgs e)

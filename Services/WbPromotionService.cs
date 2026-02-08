@@ -4,11 +4,14 @@ using SellerOps.App.Domain;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using ClosedXML.Excel;
 
 namespace SellerOps.App.Services
 {
@@ -105,7 +108,9 @@ namespace SellerOps.App.Services
             var parsed = await LoadPromotionsFromCalendarAsync(baseUrl, token, nmId, ct);
 
             var importedAt = DateTime.UtcNow;
-            var existing = await _db.WbPromotionItems.Where(x => x.NmId == nmId).ToListAsync(ct);
+            var existing = await _db.WbPromotionItems
+                .Where(x => x.NmId == nmId && x.PromotionId != null)
+                .ToListAsync(ct);
             if (existing.Count > 0)
                 _db.WbPromotionItems.RemoveRange(existing);
 
@@ -118,6 +123,119 @@ namespace SellerOps.App.Services
 
             await _db.SaveChangesAsync(ct);
             return parsed.Count;
+        }
+
+        public async Task<AutoPromotionImportResult> ImportAutoPromotionExcelAsync(string path, CancellationToken ct = default)
+        {
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+                throw new FileNotFoundException("Файл Excel не найден.", path);
+
+            using var wb = new XLWorkbook(path);
+            var ws = wb.Worksheets.First();
+
+            var promotionName = BuildPromotionNameFromFile(path);
+
+            var headers = BuildHeaderMap(ws);
+            var requiredHeaders = new[]
+            {
+                "Артикул WB",
+                "Загружаемая скидка для участия в акции, %",
+                "Плановая цена для акции",
+                "Текущая розничная цена",
+                "Текущая скидка сайта, %",
+                "Товар уже участвует в акции",
+                "Статус"
+            };
+
+            var missing = requiredHeaders
+                .Where(h => !headers.ContainsKey(NormalizeHeader(h)))
+                .ToList();
+
+            if (missing.Count > 0)
+                throw new InvalidOperationException($"В Excel не найдены колонки: {string.Join(", ", missing)}");
+
+            var colNmId = headers[NormalizeHeader("Артикул WB")];
+            var colRequiredDiscount = headers[NormalizeHeader("Загружаемая скидка для участия в акции, %")];
+            var colPlanPrice = headers[NormalizeHeader("Плановая цена для акции")];
+            var colCurrentPrice = headers[NormalizeHeader("Текущая розничная цена")];
+            var colCurrentSiteDiscount = headers[NormalizeHeader("Текущая скидка сайта, %")];
+            var colParticipates = headers[NormalizeHeader("Товар уже участвует в акции")];
+            var colStatus = headers[NormalizeHeader("Статус")];
+
+            var importedAt = DateTime.UtcNow;
+            var errors = new List<string>();
+            var imported = 0;
+            var skipped = 0;
+
+            var oldRows = await _db.WbPromotionItems
+                .Where(x => x.PromotionId == null && x.Name == promotionName)
+                .ToListAsync(ct);
+            if (oldRows.Count > 0)
+                _db.WbPromotionItems.RemoveRange(oldRows);
+
+            var row = 2;
+            while (true)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                var nmCell = ws.Cell(row, colNmId);
+                if (nmCell.IsEmpty() && string.IsNullOrWhiteSpace(nmCell.GetString()))
+                    break;
+
+                if (!TryGetLong(nmCell, out var nmId))
+                {
+                    skipped++;
+                    errors.Add($"Строка {row}: не удалось распарсить Артикул WB.");
+                    row++;
+                    continue;
+                }
+
+                var requiredDiscount = NormalizePercent(GetCellString(ws.Cell(row, colRequiredDiscount)));
+                var planPrice = GetCellString(ws.Cell(row, colPlanPrice));
+                var currentPrice = GetCellString(ws.Cell(row, colCurrentPrice));
+                var currentSiteDiscount = NormalizePercent(GetCellString(ws.Cell(row, colCurrentSiteDiscount)));
+                var participatesRaw = GetCellString(ws.Cell(row, colParticipates));
+                var status = GetCellString(ws.Cell(row, colStatus));
+
+                var inAction = IsTrueValue(participatesRaw);
+                var details = $"planPrice={planPrice}; currentPrice={currentPrice}; currentSiteDiscount={currentSiteDiscount}; wbStatus={status}";
+
+                var raw = JsonSerializer.Serialize(new Dictionary<string, string?>
+                {
+                    ["nmId"] = nmId.ToString(),
+                    ["requiredDiscount"] = requiredDiscount,
+                    ["planPrice"] = planPrice,
+                    ["currentPrice"] = currentPrice,
+                    ["currentSiteDiscount"] = currentSiteDiscount,
+                    ["participates"] = participatesRaw,
+                    ["status"] = status
+                });
+
+                _db.WbPromotionItems.Add(new WbPromotionItem
+                {
+                    PromotionId = null,
+                    Name = promotionName,
+                    NmId = nmId,
+                    RequiredDiscount = requiredDiscount,
+                    Status = inAction ? "Участвует" : "Не участвует",
+                    Details = details,
+                    RawJson = raw,
+                    ImportedAtUtc = importedAt
+                });
+
+                imported++;
+                row++;
+            }
+
+            await _db.SaveChangesAsync(ct);
+
+            return new AutoPromotionImportResult
+            {
+                PromotionName = promotionName,
+                Imported = imported,
+                Skipped = skipped,
+                Errors = errors
+            };
         }
 
         public async Task<int> RefreshCalendarPromotionsForNmIdAsync(long nmId, CancellationToken ct = default)
@@ -737,6 +855,102 @@ namespace SellerOps.App.Services
                 return true;
 
             return false;
+        }
+
+        private static Dictionary<string, int> BuildHeaderMap(IXLWorksheet ws)
+        {
+            var map = new Dictionary<string, int>();
+            var col = 1;
+            while (true)
+            {
+                var header = ws.Cell(1, col).GetString();
+                if (string.IsNullOrWhiteSpace(header))
+                    break;
+
+                var key = NormalizeHeader(header);
+                if (!map.ContainsKey(key))
+                    map[key] = col;
+
+                col++;
+                if (col > 200)
+                    break;
+            }
+
+            return map;
+        }
+
+        private static string NormalizeHeader(string header)
+        {
+            var normalized = header.Replace('\u00A0', ' ').Trim();
+            var parts = normalized.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            return string.Join(' ', parts).ToLowerInvariant();
+        }
+
+        private static string GetCellString(IXLCell cell)
+        {
+            if (cell.TryGetValue<decimal>(out var decimalValue))
+                return decimalValue.ToString("0.##", CultureInfo.InvariantCulture);
+            if (cell.TryGetValue<double>(out var doubleValue))
+                return doubleValue.ToString("0.##", CultureInfo.InvariantCulture);
+            var s = cell.GetString();
+            return string.IsNullOrWhiteSpace(s) ? "" : s.Trim();
+        }
+
+        private static bool TryGetLong(IXLCell cell, out long value)
+        {
+            value = 0;
+            if (cell.TryGetValue<long>(out var longValue))
+            {
+                value = longValue;
+                return true;
+            }
+
+            var s = cell.GetString();
+            return long.TryParse(s?.Trim(), out value);
+        }
+
+        private static bool IsTrueValue(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return false;
+
+            var normalized = value.Trim();
+            return string.Equals(normalized, "да", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalized, "yes", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalized, "true", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalized, "1", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string NormalizePercent(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return "";
+
+            return value.Replace("%", "").Trim();
+        }
+
+        private static string BuildPromotionNameFromFile(string path)
+        {
+            var name = Path.GetFileNameWithoutExtension(path) ?? "";
+            name = name.Trim();
+
+            const string prefix = "Все товары подходящие для акции_";
+            if (name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                name = name.Substring(prefix.Length);
+
+            name = Regex.Replace(name, @"_\d{2}\.\d{2}\.\d{4}\s\d{2}\.\d{2}\.\d{2}$", "");
+            name = name.Replace('_', ' ');
+            name = Regex.Replace(name, @"\s+", " ").Trim();
+
+            return string.IsNullOrWhiteSpace(name) ? "Автоакция" : name;
+        }
+
+        public sealed class AutoPromotionImportResult
+        {
+            public string PromotionName { get; set; } = "";
+            public int Imported { get; set; }
+            public int Skipped { get; set; }
+            public List<string> Errors { get; set; } = new();
         }
 
         private static long? ParseLong(JsonElement element)

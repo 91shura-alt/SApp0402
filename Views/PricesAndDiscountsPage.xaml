@@ -90,6 +90,7 @@
 
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                         <Button x:Name="CalendarRefreshButton" Content="Обновить календарь" Click="CalendarRefresh_Click" Padding="12,6" Margin="0,0,10,0"/>
+                        <Button x:Name="AutoPromotionImportButton" Content="Импорт Excel автоакции (WB)" Click="AutoPromotionImport_Click" Padding="12,6" Margin="0,0,10,0"/>
                         <TextBlock Text="Выберите товар на вкладке «Товары и размеры», чтобы увидеть акции." VerticalAlignment="Center" Foreground="Gray"/>
                     </StackPanel>
 
