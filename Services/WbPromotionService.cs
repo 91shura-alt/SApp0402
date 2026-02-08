@@ -130,13 +130,35 @@ namespace SellerOps.App.Services
             if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
                 throw new FileNotFoundException("Файл Excel не найден.", path);
 
-            using var wb = new XLWorkbook(path);
+            try
+            {
+                using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                using var wb = new XLWorkbook(fs);
+                return await ImportAutoPromotionExcelAsync(wb, path, ct);
+            }
+            catch (IOException ex)
+            {
+                if (ex.Message.Contains("being used by another process", StringComparison.OrdinalIgnoreCase)
+                    || ex.Message.Contains("cannot access the file", StringComparison.OrdinalIgnoreCase)
+                    || ex.Message.Contains("другим процессом", StringComparison.OrdinalIgnoreCase)
+                    || ex.Message.Contains("используется другим процессом", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException("Файл открыт в Excel или предпросмотром Проводника. Закрой файл и повтори импорт.");
+                }
+
+                throw;
+            }
+        }
+
+        private async Task<AutoPromotionImportResult> ImportAutoPromotionExcelAsync(XLWorkbook wb, string path, CancellationToken ct)
+        {
             var ws = wb.Worksheets.First();
 
             var promotionName = BuildPromotionNameFromFile(path);
 
             var headers = BuildHeaderMap(ws);
             var colNmId = FindHeaderIndex(headers, "артикул wb", "артикул wb (nm)");
+            var colParticipates = FindHeaderIndex(headers, "товар уже участвует в акции", "товар уже участвует");
             var colRequiredDiscount = FindHeaderIndex(headers,
                 "загружаемая скидка для участия в акции, %",
                 "загружаемая скидка",
@@ -146,22 +168,26 @@ namespace SellerOps.App.Services
             var colCurrentPrice = FindHeaderIndex(headers, "текущая розничная цена", "текущая цена");
             var colCurrentSiteDiscount = FindHeaderIndex(headers,
                 "текущая скидка сайта, %",
+                "текущая скидка на сайте, %",
                 "текущая скидка сайта",
+                "текущая скидка на сайте",
                 "текущая скидка, %");
-            var colParticipates = FindHeaderIndex(headers, "товар уже участвует в акции", "товар уже участвует");
+            var colMinPrice = FindHeaderIndex(headers, "минимальная цена для применения скидки по автоакции", "минимальная цена для применения скидки");
+            var colMinPriceDaysLeft = FindHeaderIndex(headers, "минимальная цена: осталось дней", "минимальная цена осталось дней");
             var colStatus = FindHeaderIndex(headers, "статус", "статус акции");
+
+            var isTypeB = colMinPrice != null;
+            var isTypeA = colRequiredDiscount != null || colCurrentSiteDiscount != null;
 
             var missing = new List<string>();
             if (colNmId == null) missing.Add("Артикул WB");
-            if (colRequiredDiscount == null) missing.Add("Загружаемая скидка для участия в акции, %");
-            if (colPlanPrice == null) missing.Add("Плановая цена для акции");
-            if (colCurrentPrice == null) missing.Add("Текущая розничная цена");
-            if (colCurrentSiteDiscount == null) missing.Add("Текущая скидка сайта, %");
             if (colParticipates == null) missing.Add("Товар уже участвует в акции");
-            if (colStatus == null) missing.Add("Статус");
 
             if (missing.Count > 0)
-                throw new InvalidOperationException($"В Excel не найдены колонки: {string.Join(", ", missing)}");
+            {
+                var available = string.Join(", ", headers.Keys.Take(30));
+                throw new InvalidOperationException($"В Excel не найдены колонки: {string.Join(", ", missing)}. Найдено в файле: {available}");
+            }
 
             var importedAt = DateTime.UtcNow;
             var errors = new List<string>();
@@ -191,15 +217,28 @@ namespace SellerOps.App.Services
                     continue;
                 }
 
-                var requiredDiscount = NormalizePercent(GetCellString(ws.Cell(row, colRequiredDiscount!.Value)));
-                var planPrice = GetCellString(ws.Cell(row, colPlanPrice!.Value));
-                var currentPrice = GetCellString(ws.Cell(row, colCurrentPrice!.Value));
-                var currentSiteDiscount = NormalizePercent(GetCellString(ws.Cell(row, colCurrentSiteDiscount!.Value)));
+                var requiredDiscount = colRequiredDiscount.HasValue
+                    ? NormalizePercent(GetCellString(ws.Cell(row, colRequiredDiscount.Value)))
+                    : "";
+                var planPrice = colPlanPrice.HasValue ? GetCellString(ws.Cell(row, colPlanPrice.Value)) : "";
+                var currentPrice = colCurrentPrice.HasValue ? GetCellString(ws.Cell(row, colCurrentPrice.Value)) : "";
+                var currentSiteDiscount = colCurrentSiteDiscount.HasValue
+                    ? NormalizePercent(GetCellString(ws.Cell(row, colCurrentSiteDiscount.Value)))
+                    : "";
+                var minPrice = colMinPrice.HasValue ? GetCellString(ws.Cell(row, colMinPrice.Value)) : "";
+                var minPriceDaysLeft = colMinPriceDaysLeft.HasValue ? GetCellString(ws.Cell(row, colMinPriceDaysLeft.Value)) : "";
                 var participatesRaw = GetCellString(ws.Cell(row, colParticipates!.Value));
-                var status = GetCellString(ws.Cell(row, colStatus!.Value));
+                var status = colStatus.HasValue ? GetCellString(ws.Cell(row, colStatus.Value)) : "";
 
                 var inAction = IsTrueValue(participatesRaw);
-                var details = $"planPrice={planPrice}; currentPrice={currentPrice}; currentSiteDiscount={currentSiteDiscount}; wbStatus={status}";
+                if (string.IsNullOrWhiteSpace(requiredDiscount) && isTypeA)
+                    requiredDiscount = TryComputeDiscount(planPrice, currentPrice);
+
+                var details = isTypeB
+                    ? $"planPrice={planPrice}; currentPrice={currentPrice}; minPrice={minPrice}; minPriceDaysLeft={minPriceDaysLeft}"
+                    : $"planPrice={planPrice}; currentPrice={currentPrice}; siteDiscount={currentSiteDiscount}; uploadDiscount={requiredDiscount}";
+                if (!string.IsNullOrWhiteSpace(status))
+                    details = $"{details}; wbStatus={status}";
 
                 var raw = JsonSerializer.Serialize(new Dictionary<string, string?>
                 {
@@ -208,6 +247,8 @@ namespace SellerOps.App.Services
                     ["planPrice"] = planPrice,
                     ["currentPrice"] = currentPrice,
                     ["currentSiteDiscount"] = currentSiteDiscount,
+                    ["minPrice"] = minPrice,
+                    ["minPriceDaysLeft"] = minPriceDaysLeft,
                     ["participates"] = participatesRaw,
                     ["status"] = status
                 });
@@ -882,9 +923,10 @@ namespace SellerOps.App.Services
 
         private static string NormalizeHeader(string header)
         {
-            var normalized = header.Replace('\u00A0', ' ').Trim();
-            var parts = normalized.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-            return string.Join(' ', parts).ToLowerInvariant();
+            var normalized = header.Replace('\u00A0', ' ').Trim().ToLowerInvariant();
+            normalized = Regex.Replace(normalized, @"[^\p{L}\p{Nd}]+", " ");
+            normalized = Regex.Replace(normalized, @"\s+", " ").Trim();
+            return normalized;
         }
 
         private static int? FindHeaderIndex(Dictionary<string, int> headers, params string[] candidates)
@@ -905,6 +947,28 @@ namespace SellerOps.App.Services
             }
 
             return null;
+        }
+
+        private static string TryComputeDiscount(string planPrice, string currentPrice)
+        {
+            if (!TryParseDecimal(planPrice, out var plan) || !TryParseDecimal(currentPrice, out var current) || current <= 0)
+                return "";
+
+            var discount = Math.Max(0m, 100m - (plan / current * 100m));
+            return discount.ToString("0.##", CultureInfo.InvariantCulture);
+        }
+
+        private static bool TryParseDecimal(string value, out decimal result)
+        {
+            result = 0m;
+            if (string.IsNullOrWhiteSpace(value))
+                return false;
+
+            var normalized = value.Replace(" ", "").Replace(",", ".");
+            if (decimal.TryParse(normalized, NumberStyles.Any, CultureInfo.InvariantCulture, out result))
+                return true;
+
+            return decimal.TryParse(value, NumberStyles.Any, CultureInfo.CurrentCulture, out result);
         }
 
         private static string GetCellString(IXLCell cell)
