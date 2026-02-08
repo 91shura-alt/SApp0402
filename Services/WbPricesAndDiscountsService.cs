@@ -29,6 +29,20 @@ namespace SellerOps.App.Services
 
         private (string token, string baseUrl) GetCreds()
         {
+            var localToken = AppSettings.Instance.EncryptedPricesAndDiscountsToken;
+            if (!string.IsNullOrWhiteSpace(localToken))
+            {
+                var localTokenValue = SecureStorage.Unprotect(localToken)?.Trim();
+                if (string.IsNullOrWhiteSpace(localTokenValue))
+                    throw new InvalidOperationException("Локальный токен 'PricesAndDiscounts' пустой/не расшифровался. Открой WB настройки и сохрани токен заново.");
+
+                var localBaseUrl = AppSettings.Instance.PricesAndDiscountsIsSandbox
+                    ? "https://discounts-prices-api-sandbox.wildberries.ru"
+                    : "https://discounts-prices-api.wildberries.ru";
+
+                return (localTokenValue!, localBaseUrl);
+            }
+
             var row = _db.ApiTokens.AsNoTracking()
                 .OrderByDescending(x => x.Id)
                 .FirstOrDefault(x => x.Category == "PricesAndDiscounts");
@@ -36,7 +50,10 @@ namespace SellerOps.App.Services
             if (row == null)
                 throw new InvalidOperationException("Не найден токен категории 'PricesAndDiscounts'. Открой WB настройки и добавь токен.");
 
-            var token = SecureStorage.Unprotect(row.EncryptedToken)?.Trim();
+            if (!SecureStorage.TryUnprotect(row.EncryptedToken, out var token))
+                throw new InvalidOperationException("Токен 'PricesAndDiscounts' был сохранён на другом ПК/пользователе. Пересохраните токен в настройках WB или включите режим хранения без шифрования.");
+
+            token = token?.Trim();
             if (string.IsNullOrWhiteSpace(token))
                 throw new InvalidOperationException("Токен 'PricesAndDiscounts' пустой/не расшифровался.");
 

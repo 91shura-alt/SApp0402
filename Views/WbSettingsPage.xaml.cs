@@ -21,6 +21,7 @@ namespace SellerOps.App.Views
         {
             InitializeComponent();
             LoadDbSettings();
+            LoadTokenSettingsInternal();
             LoadTokens();
         }
 
@@ -31,6 +32,36 @@ namespace SellerOps.App.Views
                 ? AppSettings.DefaultDatabasePath
                 : Path.GetFullPath(configured);
             UpdateDbPathWarning(DbPathBox.Text);
+
+            DefaultPeriodDaysBox.Text = (AppSettings.Instance.DefaultPeriodDays > 0
+                ? AppSettings.Instance.DefaultPeriodDays
+                : 7).ToString();
+        }
+
+        private void LoadTokenSettingsInternal()
+        {
+            PlainTokensBox.IsChecked = AppSettings.Instance.StoreTokensAsPlainText;
+        }
+
+        private void PlainTokensBox_Toggled(object sender, RoutedEventArgs e)
+        {
+            AppSettings.Instance.StoreTokensAsPlainText = PlainTokensBox.IsChecked == true;
+            AppSettings.Instance.Save();
+
+            MessageBox.Show(
+                "Режим без шифрования влияет только на новые сохранения токенов. " +
+                "Чтобы токены стали общими для двух ПК, пересохраните их в таблице токенов.",
+                "WB API", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        private void DefaultPeriodDaysBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            var raw = (DefaultPeriodDaysBox.Text ?? string.Empty).Trim();
+            if (!int.TryParse(raw, out var days) || days <= 0 || days > 365)
+                return;
+
+            AppSettings.Instance.DefaultPeriodDays = days;
+            AppSettings.Instance.Save();
         }
 
         private void SaveDbPath_Click(object sender, RoutedEventArgs e)
@@ -47,6 +78,8 @@ namespace SellerOps.App.Views
             }
 
             var fullPath = Path.GetFullPath(raw);
+            if (Directory.Exists(fullPath) || string.IsNullOrWhiteSpace(Path.GetExtension(fullPath)))
+                fullPath = Path.Combine(fullPath, "sellerops.db");
             AppSettings.Instance.DatabasePath = fullPath;
             AppSettings.Instance.Save();
             DbPathBox.Text = fullPath;
@@ -175,6 +208,8 @@ namespace SellerOps.App.Views
 
                 var enc = SecureStorage.Protect(token);
 
+                SaveLocalToken(category, enc, sandbox);
+
                 var model = new ApiToken
                 {
                     Category = category,
@@ -198,6 +233,73 @@ namespace SellerOps.App.Views
             }
         }
 
+        private static void SaveLocalToken(string category, string encryptedToken, bool sandbox)
+        {
+            var settings = AppSettings.Instance;
+
+            switch (category)
+            {
+                case "Content":
+                    settings.EncryptedContentToken = encryptedToken;
+                    settings.ContentIsSandbox = sandbox;
+                    break;
+                case "Statistics":
+                    settings.EncryptedStatisticsToken = encryptedToken;
+                    settings.StatisticsIsSandbox = sandbox;
+                    break;
+                case "Analytics":
+                    settings.EncryptedAnalyticsToken = encryptedToken;
+                    settings.AnalyticsIsSandbox = sandbox;
+                    break;
+                case "Marketplace":
+                    settings.EncryptedMarketplaceToken = encryptedToken;
+                    settings.MarketplaceIsSandbox = sandbox;
+                    break;
+                case "PricesAndDiscounts":
+                    settings.EncryptedPricesAndDiscountsToken = encryptedToken;
+                    settings.PricesAndDiscountsIsSandbox = sandbox;
+                    break;
+                case "Promotion":
+                    settings.EncryptedPromotionToken = encryptedToken;
+                    settings.PromotionIsSandbox = sandbox;
+                    break;
+                case "Feedbacks":
+                    settings.EncryptedFeedbacksToken = encryptedToken;
+                    settings.FeedbacksIsSandbox = sandbox;
+                    break;
+                case "BuyerChat":
+                    settings.EncryptedBuyerChatToken = encryptedToken;
+                    settings.BuyerChatIsSandbox = sandbox;
+                    break;
+                case "Supplies":
+                    settings.EncryptedSuppliesToken = encryptedToken;
+                    settings.SuppliesIsSandbox = sandbox;
+                    break;
+                case "Returns":
+                    settings.EncryptedReturnsToken = encryptedToken;
+                    settings.ReturnsIsSandbox = sandbox;
+                    break;
+                case "Documents":
+                    settings.EncryptedDocumentsToken = encryptedToken;
+                    settings.DocumentsIsSandbox = sandbox;
+                    break;
+                case "Finance":
+                    settings.EncryptedFinanceToken = encryptedToken;
+                    settings.FinanceIsSandbox = sandbox;
+                    break;
+                case "Users":
+                    settings.EncryptedUsersToken = encryptedToken;
+                    settings.UsersIsSandbox = sandbox;
+                    break;
+                case "Common":
+                    settings.EncryptedCommonToken = encryptedToken;
+                    settings.CommonIsSandbox = sandbox;
+                    break;
+            }
+
+            settings.Save();
+        }
+
         /// <summary>
         /// Проверяем реальным контент-методом (list 1 карточка), а не /ping.
         /// Пробуем сперва Authorization: <token>, затем — Bearer fallback.
@@ -215,7 +317,12 @@ namespace SellerOps.App.Views
 
                 if (TokensGrid.SelectedItem is ApiToken row)
                 {
-                    token = SecureStorage.Unprotect(row.EncryptedToken);
+                    if (!SecureStorage.TryUnprotect(row.EncryptedToken, out token))
+                    {
+                        MessageBox.Show("Токен был сохранён на другом ПК/пользователе. Пересохраните токен или включите режим хранения без шифрования.");
+                        return;
+                    }
+
                     category = row.Category;
                     sandbox = row.IsSandbox;
                     supplierId = row.SupplierId;
@@ -238,24 +345,24 @@ namespace SellerOps.App.Views
                 {
                     "Content" => sandbox ? "https://content-api-sandbox.wildberries.ru" : "https://content-api.wildberries.ru",
                     "Statistics" => sandbox ? "https://statistics-api-sandbox.wildberries.ru" : "https://statistics-api.wildberries.ru",
-                    "Analytics" => "https://seller-analytics-api.wildberries.ru",
+                    "Analytics" => sandbox ? "https://seller-analytics-api-sandbox.wildberries.ru" : "https://seller-analytics-api.wildberries.ru",
 
-                    "Marketplace" => "https://marketplace-api.wildberries.ru",
+                    "Marketplace" => sandbox ? "https://marketplace-api-sandbox.wildberries.ru" : "https://marketplace-api.wildberries.ru",
                     "PricesAndDiscounts" => sandbox ? "https://discounts-prices-api-sandbox.wildberries.ru" : "https://discounts-prices-api.wildberries.ru",
 
                     "Promotion" => sandbox ? "https://advert-api-sandbox.wildberries.ru" : "https://advert-api.wildberries.ru",
                     "Feedbacks" => sandbox ? "https://feedbacks-api-sandbox.wildberries.ru" : "https://feedbacks-api.wildberries.ru",
-                    "BuyerChat" => "https://buyer-chat-api.wildberries.ru",
-                    "Supplies" => "https://supplies-api.wildberries.ru",
-                    "Returns" => "https://returns-api.wildberries.ru",
+                    "BuyerChat" => sandbox ? "https://buyer-chat-api-sandbox.wildberries.ru" : "https://buyer-chat-api.wildberries.ru",
+                    "Supplies" => sandbox ? "https://supplies-api-sandbox.wildberries.ru" : "https://supplies-api.wildberries.ru",
+                    "Returns" => sandbox ? "https://returns-api-sandbox.wildberries.ru" : "https://returns-api.wildberries.ru",
 
-                    "Documents" => "https://documents-api.wildberries.ru",
-                    "Finance" => "https://finance-api.wildberries.ru",
+                    "Documents" => sandbox ? "https://documents-api-sandbox.wildberries.ru" : "https://documents-api.wildberries.ru",
+                    "Finance" => sandbox ? "https://finance-api-sandbox.wildberries.ru" : "https://finance-api.wildberries.ru",
 
-                    "Users" => "https://user-management-api.wildberries.ru",
-                    "Common" => "https://common-api.wildberries.ru",
+                    "Users" => sandbox ? "https://user-management-api-sandbox.wildberries.ru" : "https://user-management-api.wildberries.ru",
+                    "Common" => sandbox ? "https://common-api-sandbox.wildberries.ru" : "https://common-api.wildberries.ru",
 
-                    _ => "https://common-api.wildberries.ru",
+                    _ => sandbox ? "https://common-api-sandbox.wildberries.ru" : "https://common-api.wildberries.ru",
                 };
 
                 if (category == "Content")
