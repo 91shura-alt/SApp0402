@@ -353,109 +353,128 @@ namespace SellerOps.App.Views
 
         private async Task LoadDashboardStatsAsync()
         {
-            var db = AppDbContext.Instance;
-            var to = DateTime.UtcNow;
-            var from = to.AddDays(-_periodDays);
+            if (DashboardStatus == null || DashboardRefreshButton == null)
+                return;
 
-            var realizations = await db.WbRealizationLines.AsNoTracking()
-                .Where(x => x.NmId == _nmId && x.RrDt.HasValue && x.RrDt.Value >= from && x.RrDt.Value <= to)
-                .ToListAsync();
+            DashboardRefreshButton.IsEnabled = false;
+            DashboardStatus.Text = "Загрузка дашборда...";
 
-            var salesLines = realizations.Where(x => !IsReturn(x)).ToList();
-            var returnLines = realizations.Where(IsReturn).ToList();
-
-            var ordersQty = realizations.Sum(x => x.Quantity);
-            var salesQty = salesLines.Sum(x => x.Quantity);
-            var returnQty = returnLines.Sum(x => x.Quantity);
-            OrdersValue.Text = ordersQty.ToString();
-            SalesValue.Text = salesQty.ToString();
-            ReturnsValue.Text = returnQty.ToString();
-
-            var buyout = ordersQty > 0 ? (decimal)salesQty / ordersQty * 100m : 0m;
-            BuyoutValue.Text = ordersQty > 0 ? $"{buyout:0.##}%" : "н/д";
-
-            var salesDays = salesLines
-                .Where(x => x.SaleDt.HasValue || x.RrDt.HasValue)
-                .Select(x => (x.SaleDt ?? x.RrDt)!.Value.Date)
-                .Distinct()
-                .Count();
-            SalesDaysValue.Text = salesDays.ToString();
-
-            var revenue = salesLines.Sum(x => x.PriceWithDiscRub);
-            RevenueValue.Text = revenue.ToString("0.##");
-
-            var expenses = realizations.Sum(x => x.PpvzSalesCommission + x.DeliveryRub + x.StorageFee + x.Deduction + x.Penalty);
-            ExpensesValue.Text = expenses.ToString("0.##");
-
-            var profit = revenue - expenses;
-            ProfitValue.Text = profit.ToString("0.##");
-
-            var margin = revenue > 0 ? profit / revenue * 100m : 0m;
-            MarginValue.Text = revenue > 0 ? $"{margin:0.##}%" : "н/д";
-
-            var cost = await db.WbProducts.AsNoTracking()
-                .Where(x => x.NmId == _nmId)
-                .Select(x => x.Cost)
-                .FirstOrDefaultAsync();
-            var totalCost = cost.HasValue ? cost.Value * salesQty : 0m;
-            var roi = totalCost > 0 ? profit / totalCost * 100m : 0m;
-            RoiValue.Text = totalCost > 0 ? $"{roi:0.##}%" : "н/д";
-
-            ExpensesBlock.Text = expenses > 0 ? $"Комиссия+логистика: {expenses:0.##}" : "Нет данных";
-
-            var latestStockDate = await db.WbStockSnapshots.AsNoTracking()
-                .Where(x => x.NmId == _nmId)
-                .MaxAsync(x => (DateTime?)x.SnapshotAt);
-
-            if (latestStockDate.HasValue)
+            try
             {
-                var stocks = await db.WbStockSnapshots.AsNoTracking()
-                    .Where(x => x.NmId == _nmId && x.SnapshotAt == latestStockDate.Value)
-                    .OrderByDescending(x => x.Quantity)
+                var db = AppDbContext.Instance;
+                var to = DateTime.UtcNow;
+                var from = to.AddDays(-_periodDays);
+
+                var realizations = await db.WbRealizationLines.AsNoTracking()
+                    .Where(x => x.NmId == _nmId && x.RrDt.HasValue && x.RrDt.Value >= from && x.RrDt.Value <= to)
                     .ToListAsync();
 
-                WarehousesBlock.Text = stocks.Count == 0
-                    ? "Нет данных"
-                    : string.Join(Environment.NewLine, stocks.Take(5).Select(x => $"{x.Warehouse}: {x.Quantity}"));
+                var salesLines = realizations.Where(x => !IsReturn(x)).ToList();
+                var returnLines = realizations.Where(IsReturn).ToList();
+
+                var ordersQty = realizations.Sum(x => x.Quantity);
+                var salesQty = salesLines.Sum(x => x.Quantity);
+                var returnQty = returnLines.Sum(x => x.Quantity);
+                OrdersValue.Text = ordersQty.ToString();
+                SalesValue.Text = salesQty.ToString();
+                ReturnsValue.Text = returnQty.ToString();
+
+                var buyout = ordersQty > 0 ? (decimal)salesQty / ordersQty * 100m : 0m;
+                BuyoutValue.Text = ordersQty > 0 ? $"{buyout:0.##}%" : "н/д";
+
+                var salesDays = salesLines
+                    .Where(x => x.SaleDt.HasValue || x.RrDt.HasValue)
+                    .Select(x => (x.SaleDt ?? x.RrDt)!.Value.Date)
+                    .Distinct()
+                    .Count();
+                SalesDaysValue.Text = salesDays.ToString();
+
+                var revenue = salesLines.Sum(x => x.PriceWithDiscRub);
+                RevenueValue.Text = revenue.ToString("0.##");
+
+                var expenses = realizations.Sum(x => x.PpvzSalesCommission + x.DeliveryRub + x.StorageFee + x.Deduction + x.Penalty);
+                ExpensesValue.Text = expenses.ToString("0.##");
+
+                var profit = revenue - expenses;
+                ProfitValue.Text = profit.ToString("0.##");
+
+                var margin = revenue > 0 ? profit / revenue * 100m : 0m;
+                MarginValue.Text = revenue > 0 ? $"{margin:0.##}%" : "н/д";
+
+                var cost = await db.WbProducts.AsNoTracking()
+                    .Where(x => x.NmId == _nmId)
+                    .Select(x => x.Cost)
+                    .FirstOrDefaultAsync();
+                var totalCost = cost.HasValue ? cost.Value * salesQty : 0m;
+                var roi = totalCost > 0 ? profit / totalCost * 100m : 0m;
+                RoiValue.Text = totalCost > 0 ? $"{roi:0.##}%" : "н/д";
+
+                ExpensesBlock.Text = expenses > 0 ? $"Комиссия+логистика: {expenses:0.##}" : "Нет данных";
+
+                var latestStockDate = await db.WbStockSnapshots.AsNoTracking()
+                    .Where(x => x.NmId == _nmId)
+                    .MaxAsync(x => (DateTime?)x.SnapshotAt);
+
+                if (latestStockDate.HasValue)
+                {
+                    var stocks = await db.WbStockSnapshots.AsNoTracking()
+                        .Where(x => x.NmId == _nmId && x.SnapshotAt == latestStockDate.Value)
+                        .OrderByDescending(x => x.Quantity)
+                        .ToListAsync();
+
+                    WarehousesBlock.Text = stocks.Count == 0
+                        ? "Нет данных"
+                        : string.Join(Environment.NewLine, stocks.Take(5).Select(x => $"{x.Warehouse}: {x.Quantity}"));
+                }
+                else
+                {
+                    WarehousesBlock.Text = "Нет данных";
+                }
+
+                PhotosBlock.Text = "Нет данных";
+
+                var revenueSeries = salesLines
+                    .Where(x => x.RrDt.HasValue)
+                    .GroupBy(x => x.RrDt!.Value.Date)
+                    .OrderBy(x => x.Key)
+                    .Select(x => x.Sum(v => v.PriceWithDiscRub))
+                    .ToList();
+
+                var ordersSeries = salesLines
+                    .Where(x => x.RrDt.HasValue)
+                    .GroupBy(x => x.RrDt!.Value.Date)
+                    .OrderBy(x => x.Key)
+                    .Select(x => (decimal)x.Sum(v => v.Quantity))
+                    .ToList();
+
+                var stockSeries = await db.WbStockSnapshots.AsNoTracking()
+                    .Where(x => x.NmId == _nmId && x.SnapshotAt >= from && x.SnapshotAt <= to)
+                    .GroupBy(x => x.SnapshotAt.Date)
+                    .OrderBy(x => x.Key)
+                    .Select(x => (decimal)x.Sum(v => v.Quantity))
+                    .ToListAsync();
+
+                var salesSeries = salesLines
+                    .Where(x => x.RrDt.HasValue)
+                    .GroupBy(x => x.RrDt!.Value.Date)
+                    .OrderBy(x => x.Key)
+                    .Select(x => (decimal)x.Sum(v => v.Quantity))
+                    .ToList();
+
+                SetChart(RevenueChartCanvas, RevenueLine, OrdersLine, revenueSeries, ordersSeries);
+                SetChart(StockChartCanvas, StocksLine, SalesLine, stockSeries, salesSeries);
+                TrendValue.Text = BuildTrendText(revenueSeries);
+
+                DashboardStatus.Text = "Данные дашборда обновлены.";
             }
-            else
+            catch (Exception ex)
             {
-                WarehousesBlock.Text = "Нет данных";
+                DashboardStatus.Text = $"Ошибка дашборда: {ex.Message}";
             }
-
-            PhotosBlock.Text = "Нет данных";
-
-            var revenueSeries = salesLines
-                .Where(x => x.RrDt.HasValue)
-                .GroupBy(x => x.RrDt!.Value.Date)
-                .OrderBy(x => x.Key)
-                .Select(x => x.Sum(v => v.PriceWithDiscRub))
-                .ToList();
-
-            var ordersSeries = salesLines
-                .Where(x => x.RrDt.HasValue)
-                .GroupBy(x => x.RrDt!.Value.Date)
-                .OrderBy(x => x.Key)
-                .Select(x => (decimal)x.Sum(v => v.Quantity))
-                .ToList();
-
-            var stockSeries = await db.WbStockSnapshots.AsNoTracking()
-                .Where(x => x.NmId == _nmId && x.SnapshotAt >= from && x.SnapshotAt <= to)
-                .GroupBy(x => x.SnapshotAt.Date)
-                .OrderBy(x => x.Key)
-                .Select(x => (decimal)x.Sum(v => v.Quantity))
-                .ToListAsync();
-
-            var salesSeries = salesLines
-                .Where(x => x.RrDt.HasValue)
-                .GroupBy(x => x.RrDt!.Value.Date)
-                .OrderBy(x => x.Key)
-                .Select(x => (decimal)x.Sum(v => v.Quantity))
-                .ToList();
-
-            SetChart(RevenueChartCanvas, RevenueLine, OrdersLine, revenueSeries, ordersSeries);
-            SetChart(StockChartCanvas, StocksLine, SalesLine, stockSeries, salesSeries);
-            TrendValue.Text = BuildTrendText(revenueSeries);
+            finally
+            {
+                DashboardRefreshButton.IsEnabled = true;
+            }
         }
 
         private static string? TryExtractDescriptionFromRawJson(string? rawJson)
@@ -499,6 +518,11 @@ namespace SellerOps.App.Views
         private async void Refresh_Click(object sender, RoutedEventArgs e)
         {
             await LoadAsync();
+        }
+
+        private async void DashboardRefresh_Click(object sender, RoutedEventArgs e)
+        {
+            await LoadDashboardStatsAsync();
         }
 
         private async void PeriodCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)

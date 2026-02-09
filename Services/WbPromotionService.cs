@@ -157,24 +157,25 @@ namespace SellerOps.App.Services
             var promotionName = BuildPromotionNameFromFile(path);
 
             var headers = BuildHeaderMap(ws);
-            var colNmId = FindHeaderIndex(headers, "артикул wb", "артикул wb (nm)");
-            var colParticipates = FindHeaderIndex(headers, "товар уже участвует в акции", "товар уже участвует");
+            var headerNames = GetHeaderNames(ws);
+
+            var colNmId = FindHeaderIndex(headers, "артикул wb", "артикулвб", "nm id", "nmid");
+            var colParticipates = FindHeaderIndex(headers, "товар уже участвует в акции", "участвует", "in action");
             var colRequiredDiscount = FindHeaderIndex(headers,
-                "загружаемая скидка для участия в акции, %",
-                "загружаемая скидка",
-                "загружаемая скидка, %",
-                "загружаемая скидка для участия в акции");
+                "загружаемая скидка для участия в акции",
+                "загружаемая скидка");
             var colPlanPrice = FindHeaderIndex(headers, "плановая цена для акции", "плановая цена");
             var colCurrentPrice = FindHeaderIndex(headers, "текущая розничная цена", "текущая цена");
             var colCurrentSiteDiscount = FindHeaderIndex(headers,
-                "текущая скидка сайта, %",
-                "текущая скидка на сайте, %",
-                "текущая скидка сайта",
                 "текущая скидка на сайте",
-                "текущая скидка, %");
-            var colMinPrice = FindHeaderIndex(headers, "минимальная цена для применения скидки по автоакции", "минимальная цена для применения скидки");
-            var colMinPriceDaysLeft = FindHeaderIndex(headers, "минимальная цена: осталось дней", "минимальная цена осталось дней");
-            var colStatus = FindHeaderIndex(headers, "статус", "статус акции");
+                "текущая скидка сайта");
+            var colMinPrice = FindHeaderIndex(headers,
+                "минимальная цена для применения скидки по автоакции",
+                "минимальная цена");
+            var colMinPriceDaysLeft = FindHeaderIndex(headers,
+                "минимальная цена осталось дней",
+                "осталось дней");
+            var colStatus = FindHeaderIndex(headers, "статус");
 
             var isTypeB = colMinPrice != null;
             var isTypeA = colRequiredDiscount != null || colCurrentSiteDiscount != null;
@@ -185,7 +186,7 @@ namespace SellerOps.App.Services
 
             if (missing.Count > 0)
             {
-                var available = string.Join(", ", headers.Keys.Take(30));
+                var available = string.Join(", ", headerNames.Take(40));
                 throw new InvalidOperationException($"В Excel не найдены колонки: {string.Join(", ", missing)}. Найдено в файле: {available}");
             }
 
@@ -919,6 +920,25 @@ namespace SellerOps.App.Services
             }
 
             return map;
+        }
+
+        private static List<string> GetHeaderNames(IXLWorksheet ws)
+        {
+            var headers = new List<string>();
+            var col = 1;
+            while (true)
+            {
+                var header = ws.Cell(1, col).GetString();
+                if (string.IsNullOrWhiteSpace(header))
+                    break;
+
+                headers.Add(header.Trim());
+                col++;
+                if (col > 200)
+                    break;
+            }
+
+            return headers;
         }
 
         private static string NormalizeHeader(string header)

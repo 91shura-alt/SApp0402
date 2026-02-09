@@ -11,7 +11,12 @@
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
                 <Button Content="← Назад" Click="Back_Click" Width="100" Margin="0,0,12,0"/>
                 <TextBlock x:Name="TitleBlock" Grid.Column="1" FontSize="22" FontWeight="Bold" VerticalAlignment="Center"/>
                 <ComboBox x:Name="PeriodCombo" Grid.Column="2" Width="140" Margin="0,0,12,0" VerticalAlignment="Center"
@@ -23,6 +28,9 @@
                     <ComboBoxItem Content="Custom" Tag="0"/>
                 </ComboBox>
                 <Button x:Name="RefreshButton" Grid.Column="3" Content="Обновить данные" Click="Refresh_Click" Padding="12,6"/>
+                <Button x:Name="DashboardRefreshButton" Grid.Column="4" Content="Обновить дашборд" Click="DashboardRefresh_Click" Padding="12,6"/>
+                <TextBlock x:Name="DashboardStatus" Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="4"
+                           Margin="0,6,0,0" Foreground="#FF6B6B6B"/>
             </Grid>
 
             <!-- Основной layout -->
