@@ -30,6 +30,8 @@ namespace SellerOps.App.Data
                 if (!string.IsNullOrWhiteSpace(configuredPath))
                 {
                     var fullPath = Path.GetFullPath(configuredPath);
+                    if (Directory.Exists(fullPath) || string.IsNullOrWhiteSpace(Path.GetExtension(fullPath)))
+                        fullPath = Path.Combine(fullPath, "sellerops.db");
                     var dir = Path.GetDirectoryName(fullPath);
                     if (!string.IsNullOrWhiteSpace(dir))
                         Directory.CreateDirectory(dir);
@@ -67,6 +69,7 @@ namespace SellerOps.App.Data
         public DbSet<WbProduct> WbProducts { get; set; } = null!;
         public DbSet<WbRealizationLine> WbRealizationLines { get; set; } = null!;
         public DbSet<WbImportLog> WbImportLogs { get; set; } = null!;
+        public DbSet<SyncState> SyncStates { get; set; } = null!;
         public DbSet<WbRawFile> WbRawFiles { get; set; } = null!;
         public DbSet<WbStockSnapshot> WbStockSnapshots { get; set; } = null!;
         public DbSet<WbBalance> WbBalances { get; set; } = null!;
@@ -76,6 +79,10 @@ namespace SellerOps.App.Data
         public DbSet<WbPriceGood> WbPriceGoods { get; set; } = null!;
         public DbSet<WbPriceSize> WbPriceSizes { get; set; } = null!;
         public DbSet<WbPriceQuarantineGood> WbPriceQuarantineGoods { get; set; } = null!;
+
+        // WB Promotion API (акции)
+        public DbSet<WbPromotionItem> WbPromotionItems { get; set; } = null!;
+        public DbSet<WbPromotionCalendarItem> WbPromotionCalendarItems { get; set; } = null!;
 
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
