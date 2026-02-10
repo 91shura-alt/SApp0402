@@ -4,6 +4,7 @@ using SellerOps.App.Domain;
 using SellerOps.App.Services;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -65,8 +66,14 @@ namespace SellerOps.App.Views
         {
             try
             {
-                TitleBlock.Text = $"Карточка {_nmId}";
-                NmIdValue.Text = _nmId.ToString();
+                if (NmIdValue == null)
+                {
+                    MessageBox.Show("Ошибка: элемент NmIdValue не найден в разметке. Проверьте x:Name в ProductDetailsPage.xaml.", "Ошибка UI", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
+                SafeSetText(TitleBlock, $"Карточка {_nmId}");
+                SafeSetText(NmIdValue, _nmId.ToString(), "NmIdValue");
 
                 // 1) Пробуем WB details
                 WbCatalogService.WbCardDetails dto;
@@ -129,9 +136,8 @@ namespace SellerOps.App.Views
                 }
 
                 // 3) Заполняем UI
-                TitleBlock.Text = string.IsNullOrWhiteSpace(dto.Title)
-                    ? $"Карточка {_nmId}"
-                    : dto.Title;
+                SafeSetText(TitleBlock,
+                    string.IsNullOrWhiteSpace(dto.Title) ? $"Карточка {_nmId}" : dto.Title);
 
                 SubjectValue.Text = dto.Subject ?? "";
                 VendorCodeValue.Text = dto.VendorCode ?? "";
@@ -358,7 +364,7 @@ namespace SellerOps.App.Views
                 return;
 
             DashboardRefreshButton.IsEnabled = false;
-            DashboardStatus.Text = "Загрузка дашборда...";
+            SafeSetText(DashboardStatus, "Загрузка дашборда...");
 
             try
             {
@@ -466,11 +472,11 @@ namespace SellerOps.App.Views
                 SetChart(StockChartCanvas, StocksLine, SalesLine, stockSeries, salesSeries);
                 TrendValue.Text = BuildTrendText(revenueSeries);
 
-                DashboardStatus.Text = "Данные дашборда обновлены.";
+                SafeSetText(DashboardStatus, "Данные дашборда обновлены.");
             }
             catch (Exception ex)
             {
-                DashboardStatus.Text = $"Ошибка дашборда: {ex.Message}";
+                SafeSetText(DashboardStatus, $"Ошибка дашборда: {ex.Message}");
             }
             finally
             {
@@ -508,6 +514,18 @@ namespace SellerOps.App.Views
             return e.TryGetProperty(name, out var p)
                 ? (p.ValueKind == JsonValueKind.String ? p.GetString() : p.ToString())
                 : null;
+        }
+
+        private static void SafeSetText(TextBlock? textBlock, string text, string? debugName = null)
+        {
+            if (textBlock == null)
+            {
+                if (!string.IsNullOrWhiteSpace(debugName))
+                    Debug.WriteLine($"{debugName} is null: check x:Name in XAML");
+                return;
+            }
+
+            textBlock.Text = text;
         }
 
         private void Back_Click(object sender, RoutedEventArgs e)
