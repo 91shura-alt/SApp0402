@@ -43,7 +43,8 @@ namespace SellerOps.App.Views
 
         private async void LoadReal_Click(object sender, RoutedEventArgs e)
         {
-            var from = (FromDate.SelectedDate ?? DateTime.Today.AddDays(-7)).Date;
+            var defaultDays = AppSettings.Instance.DefaultPeriodDays > 0 ? AppSettings.Instance.DefaultPeriodDays : 7;
+            var from = (FromDate.SelectedDate ?? DateTime.Today.AddDays(-defaultDays)).Date;
             var to = (ToDate.SelectedDate ?? DateTime.Today).Date;
 
             await RunBusyAsync("Загружаю реализации WB…", async ct =>
@@ -71,7 +72,8 @@ namespace SellerOps.App.Views
 
         private async void LoadReports_Click(object sender, RoutedEventArgs e)
         {
-            var from = (FromDate.SelectedDate ?? DateTime.Today.AddDays(-7)).Date;
+            var defaultDays = AppSettings.Instance.DefaultPeriodDays > 0 ? AppSettings.Instance.DefaultPeriodDays : 7;
+            var from = (FromDate.SelectedDate ?? DateTime.Today.AddDays(-defaultDays)).Date;
             var to = (ToDate.SelectedDate ?? DateTime.Today).Date;
 
             await RunBusyAsync("Загружаю прочие отчёты WB…", async ct =>
@@ -139,6 +141,9 @@ namespace SellerOps.App.Views
         private void RefreshAll()
         {
             RefreshSummary();
+            RefreshProducts();
+            RefreshDaily();
+            RefreshFinance();
             RefreshReals();
             RefreshStocks();
             RefreshReports();
@@ -146,15 +151,44 @@ namespace SellerOps.App.Views
 
         private void RefreshSummary()
         {
-            var from = (FromDate.SelectedDate ?? DateTime.Today.AddDays(-7)).Date;
+            var defaultDays = AppSettings.Instance.DefaultPeriodDays > 0 ? AppSettings.Instance.DefaultPeriodDays : 7;
+            var from = (FromDate.SelectedDate ?? DateTime.Today.AddDays(-defaultDays)).Date;
             var to = (ToDate.SelectedDate ?? DateTime.Today).Date;
 
             SummaryGrid.ItemsSource = _analytics.BuildProfitSummary(from, to);
         }
 
+        private void RefreshProducts()
+        {
+            var defaultDays = AppSettings.Instance.DefaultPeriodDays > 0 ? AppSettings.Instance.DefaultPeriodDays : 7;
+            var from = (FromDate.SelectedDate ?? DateTime.Today.AddDays(-defaultDays)).Date;
+            var to = (ToDate.SelectedDate ?? DateTime.Today).Date;
+
+            ProductsGrid.ItemsSource = _analytics.BuildProfitSummary(from, to);
+        }
+
+        private void RefreshDaily()
+        {
+            var defaultDays = AppSettings.Instance.DefaultPeriodDays > 0 ? AppSettings.Instance.DefaultPeriodDays : 7;
+            var from = (FromDate.SelectedDate ?? DateTime.Today.AddDays(-defaultDays)).Date;
+            var to = (ToDate.SelectedDate ?? DateTime.Today).Date;
+
+            DailyGrid.ItemsSource = _analytics.BuildDailySummary(from, to);
+        }
+
+        private void RefreshFinance()
+        {
+            var defaultDays = AppSettings.Instance.DefaultPeriodDays > 0 ? AppSettings.Instance.DefaultPeriodDays : 7;
+            var from = (FromDate.SelectedDate ?? DateTime.Today.AddDays(-defaultDays)).Date;
+            var to = (ToDate.SelectedDate ?? DateTime.Today).Date;
+
+            FinanceGrid.ItemsSource = _analytics.BuildDailySummary(from, to);
+        }
+
         private void RefreshReals()
         {
-            var from = (FromDate.SelectedDate ?? DateTime.Today.AddDays(-7)).Date;
+            var defaultDays = AppSettings.Instance.DefaultPeriodDays > 0 ? AppSettings.Instance.DefaultPeriodDays : 7;
+            var from = (FromDate.SelectedDate ?? DateTime.Today.AddDays(-defaultDays)).Date;
             var to = (ToDate.SelectedDate ?? DateTime.Today).Date.AddDays(1).AddTicks(-1); // конец дня
 
             RealGrid.ItemsSource = _db.WbRealizationLines.AsNoTracking()
@@ -184,7 +218,8 @@ namespace SellerOps.App.Views
 
         private void RefreshReports()
         {
-            var from = (FromDate.SelectedDate ?? DateTime.Today.AddDays(-7)).Date;
+            var defaultDays = AppSettings.Instance.DefaultPeriodDays > 0 ? AppSettings.Instance.DefaultPeriodDays : 7;
+            var from = (FromDate.SelectedDate ?? DateTime.Today.AddDays(-defaultDays)).Date;
             var to = (ToDate.SelectedDate ?? DateTime.Today).Date;
 
             ReportsGrid.ItemsSource = _db.WbImportLogs.AsNoTracking()
