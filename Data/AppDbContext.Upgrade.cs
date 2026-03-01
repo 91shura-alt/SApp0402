@@ -8,10 +8,6 @@ namespace SellerOps.App.Data
     {
         public void EnsureUpgrade()
         {
-            // Если база новая — EF создаст схему.
-            // ВАЖНО: если база уже существует, EnsureCreated НЕ добавит новые таблицы/колонки.
-            Database.EnsureCreated();
-
             using var con = new SqliteConnection($"Data Source={DbPath}");
             con.Open();
 
@@ -23,8 +19,7 @@ namespace SellerOps.App.Data
 
             EnsureTable(con, "WbProducts", @"
 CREATE TABLE IF NOT EXISTS ""WbProducts"" (
-    ""Id"" INTEGER NOT NULL CONSTRAINT ""PK_WbProducts"" PRIMARY KEY AUTOINCREMENT,
-    ""NmId"" INTEGER NOT NULL,
+    ""NmId"" INTEGER NOT NULL CONSTRAINT ""PK_WbProducts"" PRIMARY KEY,
     ""Article"" TEXT NULL,
     ""Title"" TEXT NULL,
     ""Brand"" TEXT NULL,
@@ -37,7 +32,10 @@ CREATE TABLE IF NOT EXISTS ""WbProducts"" (
     ""HeightCm"" NUMERIC NULL,
     ""WeightKg"" NUMERIC NULL,
     ""VolumeM3"" NUMERIC NULL,
-    ""SyncedAt"" TEXT NULL
+    ""SyncedAt"" TEXT NULL,
+    ""Cost"" NUMERIC NULL,
+    ""BarcodesJson"" TEXT NULL,
+    ""RawJson"" TEXT NULL
 );");
 
             EnsureTable(con, "WbFbsOrders", @"
@@ -65,10 +63,9 @@ CREATE TABLE IF NOT EXISTS ""WbFbsOrders"" (
 
             EnsureTable(con, "WbRealizationLines", @"
 CREATE TABLE IF NOT EXISTS ""WbRealizationLines"" (
-    ""Id"" INTEGER NOT NULL CONSTRAINT ""PK_WbRealizationLines"" PRIMARY KEY AUTOINCREMENT,
-    ""RrdId"" INTEGER NOT NULL,
+    ""RrdId"" INTEGER NOT NULL CONSTRAINT ""PK_WbRealizationLines"" PRIMARY KEY,
     ""RrDt"" TEXT NULL,
-    ""NmId"" INTEGER NULL,
+    ""NmId"" INTEGER NOT NULL DEFAULT 0,
     ""SupplierArticle"" TEXT NULL,
     ""TechSize"" TEXT NULL,
     ""Barcode"" TEXT NULL,
@@ -76,16 +73,19 @@ CREATE TABLE IF NOT EXISTS ""WbRealizationLines"" (
     ""Srid"" TEXT NULL,
     ""DocTypeName"" TEXT NULL,
     ""SupplierOperName"" TEXT NULL,
-    ""Quantity"" INTEGER NULL,
-    ""PriceWithDiscRub"" NUMERIC NULL,
-    ""PpvzForPay"" NUMERIC NULL,
-    ""PpvzSalesCommission"" NUMERIC NULL,
-    ""DeliveryRub"" NUMERIC NULL,
-    ""StorageFee"" NUMERIC NULL,
-    ""Deduction"" NUMERIC NULL,
-    ""Penalty"" NUMERIC NULL,
+    ""Quantity"" INTEGER NOT NULL DEFAULT 0,
+    ""PriceWithDiscRub"" NUMERIC NOT NULL DEFAULT 0,
+    ""PpvzForPay"" NUMERIC NOT NULL DEFAULT 0,
+    ""PpvzSalesCommission"" NUMERIC NOT NULL DEFAULT 0,
+    ""DeliveryRub"" NUMERIC NOT NULL DEFAULT 0,
+    ""StorageFee"" NUMERIC NOT NULL DEFAULT 0,
+    ""Deduction"" NUMERIC NOT NULL DEFAULT 0,
+    ""Penalty"" NUMERIC NOT NULL DEFAULT 0,
     ""CreateDt"" TEXT NULL,
-    ""CancelDt"" TEXT NULL
+    ""CancelDt"" TEXT NULL,
+    ""OrderDt"" TEXT NULL,
+    ""SaleDt"" TEXT NULL,
+    ""RawJson"" TEXT NULL
 );");
 
             EnsureTable(con, "WbStockSnapshots", @"
@@ -400,6 +400,42 @@ WHERE
             // ----------------------------
             ExecNonQuery(con, @"CREATE UNIQUE INDEX IF NOT EXISTS IX_WbFbsOrders_OrderId ON WbFbsOrders(OrderId);");
             ExecNonQuery(con, @"CREATE UNIQUE INDEX IF NOT EXISTS IX_WbProducts_NmId ON WbProducts(NmId);");
+            ExecNonQuery(con, @"CREATE UNIQUE INDEX IF NOT EXISTS IX_WbRealizationLines_RrdId ON WbRealizationLines(RrdId);");
+
+            // --- ApiTokens ---
+            EnsureColumn(con, "ApiTokens", "SupplierId", "INTEGER");
+
+            // --- WbBalances ---
+            EnsureTable(con, "WbBalances", @"
+CREATE TABLE IF NOT EXISTS ""WbBalances"" (
+    ""Id"" INTEGER NOT NULL CONSTRAINT ""PK_WbBalances"" PRIMARY KEY AUTOINCREMENT,
+    ""NmId"" INTEGER NULL,
+    ""Period"" TEXT NULL,
+    ""Amount"" TEXT NULL
+);");
+
+            // --- Boxes / BoxItems (учёт коробов и их содержимого) ---
+            EnsureTable(con, "Boxes", @"
+CREATE TABLE IF NOT EXISTS ""Boxes"" (
+    ""Id"" INTEGER NOT NULL CONSTRAINT ""PK_Boxes"" PRIMARY KEY AUTOINCREMENT,
+    ""SupplyId"" TEXT NOT NULL,
+    ""Code"" TEXT NOT NULL DEFAULT '',
+    ""Status"" TEXT NOT NULL DEFAULT 'Нет',
+    ""CreatedAt"" TEXT NOT NULL
+);");
+
+            EnsureTable(con, "BoxItems", @"
+CREATE TABLE IF NOT EXISTS ""BoxItems"" (
+    ""Id"" INTEGER NOT NULL CONSTRAINT ""PK_BoxItems"" PRIMARY KEY AUTOINCREMENT,
+    ""BoxId"" INTEGER NOT NULL,
+    ""SupplyItemId"" INTEGER NOT NULL,
+    ""Quantity"" INTEGER NOT NULL DEFAULT 0,
+    ""CreatedAt"" TEXT NOT NULL
+);");
+
+            EnsureColumn(con, "Boxes", "Code", "TEXT");
+            EnsureColumn(con, "Boxes", "Status", "TEXT");
+            EnsureColumn(con, "BoxItems", "Quantity", "INTEGER");
 
             tx.Commit();
         }

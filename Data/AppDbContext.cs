@@ -62,6 +62,8 @@ namespace SellerOps.App.Data
         public DbSet<Supply> Supplies { get; set; } = null!;
         public DbSet<SupplyItem> SupplyItems { get; set; } = null!;
         public DbSet<ScanLog> ScanLogs { get; set; } = null!;
+        public DbSet<Box> Boxes { get; set; } = null!;
+        public DbSet<BoxItem> BoxItems { get; set; } = null!;
         public DbSet<ApiToken> ApiTokens { get; set; } = null!;
 
         public DbSet<SupplyPosition> SupplyPositions { get; set; } = null!;
