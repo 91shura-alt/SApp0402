@@ -62,7 +62,6 @@ namespace SellerOps.App.Views
             var data = db.WbProducts
                 .AsNoTracking()
                 .OrderBy(x => x.Title)
-                .Take(1000)
                 .ToList();
 
             SetGridItemsSource(data);
@@ -103,7 +102,6 @@ namespace SellerOps.App.Views
 
             ProductsGrid.ItemsSource = data
                 .OrderBy(x => x.Title)
-                .Take(1000)
                 .ToList();
         }
 
