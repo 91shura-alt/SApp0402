@@ -68,11 +68,14 @@ namespace SellerOps.App.Views
             {
                 SafeSetText(TitleBlock, $"Карточка {_nmId}");
                 var nmIdControl = NmIdValue ?? (System.Windows.Controls.TextBlock?)FindName("NmIdValue");
-                if (nmIdControl == null)
+                if (nmIdControl != null)
                 {
-                    throw new InvalidOperationException("Ошибка UI: элемент NmIdValue не найден в разметке. Проверьте x:Name в ProductDetailsPage.xaml.");
+                    nmIdControl.Text = _nmId.ToString();
                 }
-                nmIdControl.Text = _nmId.ToString();
+                else
+                {
+                    Debug.WriteLine("NmIdValue is null: check x:Name in ProductDetailsPage.xaml");
+                }
 
                 // 1) Пробуем WB details
                 WbCatalogService.WbCardDetails dto;
