@@ -195,32 +195,44 @@ namespace SellerOps.App.Views
             var db = AppDbContext.Instance;
             SafeSetText(DashboardStatus, "Автообновление данных...");
 
-            await TryAutoRefreshAsync(db, $"product_card_prices_{_nmId}", 20, async () =>
+            await TryRefreshAlwaysAsync(async () =>
             {
                 var svc = new WbPricesAndDiscountsService(db);
                 await svc.ImportGoodsByNmIdsAsync(new[] { _nmId });
-            });
+            }, "prices");
 
-            await TryAutoRefreshAsync(db, $"product_card_promotions_{_nmId}", 30, async () =>
+            await TryRefreshAlwaysAsync(async () =>
             {
                 var svc = new WbPromotionService(db);
                 await svc.RefreshPromotionsForNmIdAsync(_nmId);
                 await svc.RefreshCalendarPromotionsForNmIdAsync(_nmId);
-            });
+            }, "promotions");
 
-            await TryAutoRefreshAsync(db, $"product_card_stocks", 20, async () =>
+            await TryAutoRefreshAsync(db, $"product_card_stocks", 10, async () =>
             {
                 var svc = new WbStatisticsService(db);
                 await svc.SnapshotStocksAsync();
             });
 
-            await TryAutoRefreshAsync(db, $"product_card_realizations", 45, async () =>
+            await TryAutoRefreshAsync(db, $"product_card_realizations", 15, async () =>
             {
                 var svc = new WbStatisticsService(db);
                 var to = DateTime.UtcNow;
-                var from = to.AddDays(-Math.Min(Math.Max(_periodDays, 1), 14));
+                var from = to.AddDays(-Math.Max(_periodDays, 1));
                 await svc.ImportRealizationByPeriodAsync(from, to, "product_card_auto_refresh");
             });
+        }
+
+        private async Task TryRefreshAlwaysAsync(Func<Task> action, string key)
+        {
+            try
+            {
+                await action();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Auto refresh failed ({key}): {ex.Message}");
+            }
         }
 
         private async Task TryAutoRefreshAsync(AppDbContext db, string key, int minIntervalMinutes, Func<Task> action)
@@ -473,10 +485,10 @@ namespace SellerOps.App.Views
                     .Count();
                 SalesDaysValue.Text = salesDays.ToString();
 
-                var revenue = salesLines.Sum(x => x.PriceWithDiscRub);
+                var revenue = salesLines.Sum(x => x.PpvzForPay != 0 ? x.PpvzForPay : x.PriceWithDiscRub);
                 RevenueValue.Text = revenue.ToString("0.##");
 
-                var expenses = realizations.Sum(x => x.PpvzSalesCommission + x.DeliveryRub + x.StorageFee + x.Deduction + x.Penalty);
+                var expenses = salesLines.Sum(x => x.PpvzSalesCommission + x.DeliveryRub + x.StorageFee + x.Deduction + x.Penalty);
                 ExpensesValue.Text = expenses.ToString("0.##");
 
                 var profit = revenue - expenses;
@@ -521,7 +533,7 @@ namespace SellerOps.App.Views
                     .Where(x => x.RrDt.HasValue)
                     .GroupBy(x => x.RrDt!.Value.Date)
                     .OrderBy(x => x.Key)
-                    .Select(x => x.Sum(v => v.PriceWithDiscRub))
+                    .Select(x => x.Sum(v => v.PpvzForPay != 0 ? v.PpvzForPay : v.PriceWithDiscRub))
                     .ToList();
 
                 var ordersSeries = salesLines
