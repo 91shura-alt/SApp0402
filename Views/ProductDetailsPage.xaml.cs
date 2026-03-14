@@ -171,6 +171,15 @@ namespace SellerOps.App.Views
             }
             catch (Exception ex)
             {
+                if (IsUnauthorizedError(ex))
+                {
+                    SafeSetText(TitleBlock, $"Карточка {_nmId} (нет доступа к WB API)");
+                    RawJsonBox.Text = string.IsNullOrWhiteSpace(RawJsonBox.Text)
+                        ? "Нет доступа к WB API (401). Проверьте токен Content в WB настройках."
+                        : RawJsonBox.Text;
+                    return;
+                }
+
                 MessageBox.Show(ex.Message, "Ошибка загрузки карточки", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
@@ -515,6 +524,14 @@ namespace SellerOps.App.Views
                 : null;
         }
 
+
+        private static bool IsUnauthorizedError(Exception ex)
+        {
+            var message = ex.ToString();
+            return message.Contains("401", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("unauthorized", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("не авториз", StringComparison.OrdinalIgnoreCase);
+        }
         private static void SafeSetText(TextBlock? textBlock, string text, string? debugName = null)
         {
             if (textBlock == null)
