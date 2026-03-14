@@ -77,6 +77,8 @@ namespace SellerOps.App.Views
                     Debug.WriteLine("NmIdValue is null: check x:Name in ProductDetailsPage.xaml");
                 }
 
+                await TryAutoRefreshAllDataAsync();
+
                 // 1) Пробуем WB details
                 WbCatalogService.WbCardDetails dto;
                 try
@@ -184,6 +186,70 @@ namespace SellerOps.App.Views
                 }
 
                 MessageBox.Show(ex.Message, "Ошибка загрузки карточки", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+
+        private async Task TryAutoRefreshAllDataAsync()
+        {
+            var db = AppDbContext.Instance;
+            SafeSetText(DashboardStatus, "Автообновление данных...");
+
+            await TryAutoRefreshAsync(db, $"product_card_prices_{_nmId}", 20, async () =>
+            {
+                var svc = new WbPricesAndDiscountsService(db);
+                await svc.ImportGoodsByNmIdsAsync(new[] { _nmId });
+            });
+
+            await TryAutoRefreshAsync(db, $"product_card_promotions_{_nmId}", 30, async () =>
+            {
+                var svc = new WbPromotionService(db);
+                await svc.RefreshPromotionsForNmIdAsync(_nmId);
+                await svc.RefreshCalendarPromotionsForNmIdAsync(_nmId);
+            });
+
+            await TryAutoRefreshAsync(db, $"product_card_stocks", 20, async () =>
+            {
+                var svc = new WbStatisticsService(db);
+                await svc.SnapshotStocksAsync();
+            });
+
+            await TryAutoRefreshAsync(db, $"product_card_realizations", 45, async () =>
+            {
+                var svc = new WbStatisticsService(db);
+                var to = DateTime.UtcNow;
+                var from = to.AddDays(-Math.Min(Math.Max(_periodDays, 1), 14));
+                await svc.ImportRealizationByPeriodAsync(from, to, "product_card_auto_refresh");
+            });
+        }
+
+        private async Task TryAutoRefreshAsync(AppDbContext db, string key, int minIntervalMinutes, Func<Task> action)
+        {
+            try
+            {
+                var state = await db.SyncStates.AsNoTracking().FirstOrDefaultAsync(x => x.Key == key);
+                var needRefresh = state?.LastSyncUtc == null
+                    || DateTime.UtcNow - state.LastSyncUtc.Value > TimeSpan.FromMinutes(minIntervalMinutes);
+
+                if (!needRefresh)
+                    return;
+
+                await action();
+
+                var row = await db.SyncStates.FirstOrDefaultAsync(x => x.Key == key);
+                if (row == null)
+                {
+                    row = new SyncState { Key = key };
+                    db.SyncStates.Add(row);
+                }
+
+                row.LastSyncUtc = DateTime.UtcNow;
+                row.LastValueText = "ok";
+                await db.SaveChangesAsync();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Auto refresh failed ({key}): {ex.Message}");
             }
         }
 
